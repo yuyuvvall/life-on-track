@@ -287,13 +287,13 @@ function calculateGoalStats(goal: GoalRow, logs: GoalLogRow[], subGoalRows: Goal
       const sortedLogs = [...logs].sort((a, b) => 
         new Date(a.log_date).getTime() - new Date(b.log_date).getTime()
       );
-      
+
       const firstLog = sortedLogs[0];
       const lastLog = sortedLogs[sortedLogs.length - 1];
-      const daysDiff = Math.max(1, 
+      const daysDiff = 1 + Math.max(1, 
         (new Date(lastLog.log_date).getTime() - new Date(firstLog.log_date).getTime()) / (1000 * 60 * 60 * 24)
       );
-      const pagesDiff = lastLog.value - firstLog.value;
+      const pagesDiff = lastLog.value
       
       velocity = Math.round((pagesDiff / daysDiff) * 10) / 10; // pages per day
       
