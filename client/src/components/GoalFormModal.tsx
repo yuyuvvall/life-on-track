@@ -12,7 +12,7 @@ export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalP
   const createGoal = useCreateGoal();
   
   const [title, setTitle] = useState('');
-  const [goalType, setGoalType] = useState<GoalType>(parentId ? 'numeric' : 'reading');
+  const [goalType, setGoalType] = useState<GoalType>('frequency');
   const [targetValue, setTargetValue] = useState('');
   const [unit, setUnit] = useState('');
   const [totalPages, setTotalPages] = useState('');
@@ -67,32 +67,30 @@ export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalP
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Goal Type - hide for sub-goals */}
-          {!isSubGoal && (
-            <div>
-              <label className="block text-xs text-gray-500 mb-2">Goal Type</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { type: 'reading' as const, icon: '📖', label: 'Reading' },
-                  { type: 'frequency' as const, icon: '🔄', label: 'Habit' },
-                  { type: 'numeric' as const, icon: '📊', label: 'Numeric' },
-                ].map(({ type, icon, label }) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setGoalType(type)}
-                    className={`py-3 rounded-lg text-center transition-colors
-                      ${goalType === type 
-                        ? 'bg-accent-blue text-white' 
-                        : 'bg-surface-600 text-gray-300 hover:bg-surface-500'}`}
-                  >
-                    <div className="text-xl mb-1">{icon}</div>
-                    <div className="text-xs">{label}</div>
-                  </button>
-                ))}
-              </div>
+          {/* Goal Type - available for all goals including sub-goals */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-2">Goal Type</label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { type: 'reading' as const, icon: '📖', label: 'Reading' },
+                { type: 'frequency' as const, icon: '🔄', label: 'Habit' },
+                { type: 'numeric' as const, icon: '📊', label: 'Numeric' },
+              ].map(({ type, icon, label }) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setGoalType(type)}
+                  className={`py-3 rounded-lg text-center transition-colors
+                    ${goalType === type 
+                      ? 'bg-accent-blue text-white' 
+                      : 'bg-surface-600 text-gray-300 hover:bg-surface-500'}`}
+                >
+                  <div className="text-xl mb-1">{icon}</div>
+                  <div className="text-xs">{label}</div>
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* Title */}
           <div>
@@ -116,7 +114,7 @@ export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalP
           </div>
 
           {/* Reading-specific fields */}
-          {goalType === 'reading' && !isSubGoal && (
+          {goalType === 'reading' && (
             <div>
               <label className="block text-xs text-gray-500 mb-1">Total Pages</label>
               <input
@@ -130,7 +128,7 @@ export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalP
           )}
 
           {/* Frequency-specific fields */}
-          {goalType === 'frequency' && !isSubGoal && (
+          {goalType === 'frequency' && (
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -169,8 +167,8 @@ export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalP
             </>
           )}
 
-          {/* Numeric-specific fields (also for sub-goals) */}
-          {(goalType === 'numeric' || isSubGoal) && (
+          {/* Numeric-specific fields */}
+          {goalType === 'numeric' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Target Value</label>
@@ -195,18 +193,16 @@ export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalP
             </div>
           )}
 
-          {/* Target Date (optional) - hide for sub-goals */}
-          {!isSubGoal && (
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Target Date (optional)</label>
-              <input
-                type="date"
-                value={targetDate}
-                onChange={(e) => setTargetDate(e.target.value)}
-                className="w-full"
-              />
-            </div>
-          )}
+          {/* Target Date (optional) */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Target Date (optional)</label>
+            <input
+              type="date"
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
 
           {/* Actions */}
           <div className="flex gap-2 pt-2">

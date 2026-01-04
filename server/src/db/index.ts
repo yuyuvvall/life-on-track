@@ -1,11 +1,35 @@
 import Database, { Database as DatabaseType } from 'better-sqlite3';
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { readFileSync, mkdirSync, existsSync } from 'fs';
+import { join, dirname, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const db: DatabaseType = new Database(join(__dirname, '../../data/auditor.db'));
+// Get database path from environment or use default
+const DATABASE_URL = process.env.DATABASE_URL || './data/auditor.db';
+
+// Resolve the database path
+function resolveDatabasePath(dbUrl: string): string {
+  // If it's an absolute path, use it directly
+  if (isAbsolute(dbUrl)) {
+    return dbUrl;
+  }
+  
+  // If it's a relative path, resolve from server root (parent of src)
+  const serverRoot = join(__dirname, '../..');
+  return join(serverRoot, dbUrl);
+}
+
+const dbPath = resolveDatabasePath(DATABASE_URL);
+
+// Ensure the directory exists for local SQLite files
+const dbDir = dirname(dbPath);
+if (!existsSync(dbDir)) {
+  mkdirSync(dbDir, { recursive: true });
+}
+
+// Create database connection
+const db: DatabaseType = new Database(dbPath);
 
 // Enable foreign keys
 db.pragma('foreign_keys = ON');
@@ -13,6 +37,9 @@ db.pragma('foreign_keys = ON');
 // Initialize schema
 const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
 db.exec(schema);
+
+// Log database location on startup
+console.log(`[Database] Connected to: ${dbPath}`);
 
 export default db;
 
@@ -36,4 +63,3 @@ export function getWeekEnd(weekStart: string): string {
   d.setDate(d.getDate() + 6);
   return d.toISOString().split('T')[0];
 }
-

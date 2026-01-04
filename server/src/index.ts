@@ -1,22 +1,12 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { mkdirSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
 
 import tasksRouter from './routes/tasks.js';
 import workLogsRouter from './routes/workLogs.js';
 import expensesRouter from './routes/expenses.js';
 import goalsRouter from './routes/goals.js';
 import weeklyRouter from './routes/weekly.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// Ensure data directory exists
-const dataDir = join(__dirname, '../data');
-if (!existsSync(dataDir)) {
-  mkdirSync(dataDir, { recursive: true });
-}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -45,5 +35,6 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
 app.listen(PORT, () => {
   console.log(`[Auditor API] Running on http://localhost:${PORT}`);
+  console.log(`[Auditor API] Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useGoalStats, useLogGoalProgress, useDeleteGoal, useUpdateGoal } from '@/hooks';
+import { useGoalStats, useLogGoalProgress, useDeleteGoal } from '@/hooks';
 import { GoalFormModal } from '@/components/GoalFormModal';
 import type { Goal } from '@/types';
 
@@ -10,7 +10,6 @@ export function GoalDetailView() {
   const { data: stats, isLoading } = useGoalStats(id!);
   const logProgress = useLogGoalProgress();
   const deleteGoal = useDeleteGoal();
-  const updateGoal = useUpdateGoal();
 
   const [logValue, setLogValue] = useState('');
   const [logNote, setLogNote] = useState('');
@@ -52,10 +51,26 @@ export function GoalDetailView() {
     }
   };
 
-  const handleSubGoalComplete = (subGoal: Goal) => {
-    // Toggle completion by setting current_value to target or 0
-    const newValue = subGoal.currentValue >= subGoal.targetValue ? 0 : subGoal.targetValue;
-    updateGoal.mutate({ id: subGoal.id, data: { currentValue: newValue } });
+  // Helper to get progress percentage for any sub-goal type
+  const getSubGoalProgress = (sg: Goal): number => {
+    if (sg.goalType === 'reading' && sg.totalPages) {
+      return Math.min(Math.round(((sg.currentPage ?? 0) / sg.totalPages) * 100), 100);
+    }
+    if (sg.targetValue > 0) {
+      return Math.min(Math.round((sg.currentValue / sg.targetValue) * 100), 100);
+    }
+    return 0;
+  };
+
+  // Helper to get progress text for any sub-goal type
+  const getSubGoalProgressText = (sg: Goal): string => {
+    if (sg.goalType === 'reading' && sg.totalPages) {
+      return `${sg.currentPage ?? 0}/${sg.totalPages} pg`;
+    }
+    if (sg.goalType === 'frequency') {
+      return `${sg.currentValue}/${sg.targetValue} ${sg.frequencyPeriod || 'times'}`;
+    }
+    return `${sg.currentValue}/${sg.targetValue} ${sg.unit || ''}`;
   };
 
   const typeIcon = goal.goalType === 'reading' ? '📖' : goal.goalType === 'frequency' ? '🔄' : '📊';
@@ -115,15 +130,15 @@ export function GoalDetailView() {
             </div>
           )}
 
-          {goal.goalType === 'numeric' && !hasSubGoals && (
+          {goal.goalType === 'numeric' && (
             <div className="text-sm text-gray-400">
               <span className="font-mono text-gray-100">{goal.currentValue}</span> of{' '}
               <span className="font-mono text-gray-100">{goal.targetValue}</span> {goal.unit}
             </div>
           )}
 
-          {goal.goalType === 'numeric' && hasSubGoals && (
-            <div className="text-sm text-gray-400">
+          {hasSubGoals && (
+            <div className="text-sm text-gray-400 mt-2 pt-2 border-t border-surface-500">
               <span className="font-mono text-gray-100">{subGoalsCompleted}</span> of{' '}
               <span className="font-mono text-gray-100">{subGoals.length}</span> sub-goals completed
             </div>
@@ -154,82 +169,70 @@ export function GoalDetailView() {
           </div>
         )}
 
-        {/* Sub-Goals Section (for numeric goals) */}
-        {goal.goalType === 'numeric' && (
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
-                Sub-Goals ({subGoalsCompleted}/{subGoals.length})
-              </h2>
+        {/* Sub-Goals Section (available for all goal types) */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+              Sub-Goals ({subGoalsCompleted}/{subGoals.length})
+            </h2>
+            <button
+              onClick={() => setShowAddSubGoal(true)}
+              className="text-xs text-accent-blue hover:text-blue-400"
+            >
+              + Add Sub-Goal
+            </button>
+          </div>
+
+          {subGoals.length === 0 ? (
+            <div className="bg-surface-700 rounded-lg p-4 text-center">
+              <div className="text-gray-500 text-sm mb-2">No sub-goals yet</div>
               <button
                 onClick={() => setShowAddSubGoal(true)}
                 className="text-xs text-accent-blue hover:text-blue-400"
               >
-                + Add Sub-Goal
+                Add a sub-goal to break down this goal
               </button>
             </div>
+          ) : (
+            <div className="space-y-2">
+              {subGoals.map((sg) => {
+                const isComplete = sg.goalType === 'numeric' || sg.goalType === 'reading'
+                  ? sg.currentValue >= sg.targetValue || (sg.currentPage ?? 0) >= (sg.totalPages ?? 1)
+                  : sg.currentValue >= sg.targetValue;
+                const sgPercent = getSubGoalProgress(sg);
+                const sgTypeIcon = sg.goalType === 'reading' ? '📖' : sg.goalType === 'frequency' ? '🔄' : '📊';
 
-            {subGoals.length === 0 ? (
-              <div className="bg-surface-700 rounded-lg p-4 text-center">
-                <div className="text-gray-500 text-sm mb-2">No sub-goals yet</div>
-                <button
-                  onClick={() => setShowAddSubGoal(true)}
-                  className="text-xs text-accent-blue hover:text-blue-400"
-                >
-                  Add your first sub-goal (e.g., Bench Press 100kg)
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {subGoals.map((sg) => {
-                  const isComplete = sg.currentValue >= sg.targetValue;
-                  const sgPercent = sg.targetValue > 0 
-                    ? Math.min(Math.round((sg.currentValue / sg.targetValue) * 100), 100)
-                    : 0;
-
-                  return (
-                    <div 
-                      key={sg.id} 
-                      className={`bg-surface-700 rounded-lg p-3 ${isComplete ? 'opacity-60' : ''}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => handleSubGoalComplete(sg)}
-                          className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors
-                            ${isComplete 
-                              ? 'bg-accent-green border-accent-green' 
-                              : 'border-gray-500 hover:border-accent-green'}`}
-                        >
-                          {isComplete && (
-                            <svg className="w-3 h-3 text-surface-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <span className={`text-sm ${isComplete ? 'text-gray-500 line-through' : 'text-gray-100'}`}>
-                              {sg.title}
-                            </span>
-                            <span className="font-mono text-xs text-gray-400">
-                              {sg.currentValue}/{sg.targetValue} {sg.unit}
-                            </span>
-                          </div>
-                          <div className="h-1 bg-surface-500 rounded-full overflow-hidden mt-1">
-                            <div 
-                              className={`h-full rounded-full transition-all ${isComplete ? 'bg-accent-green' : 'bg-accent-amber'}`}
-                              style={{ width: `${sgPercent}%` }}
-                            />
-                          </div>
+                return (
+                  <Link
+                    key={sg.id}
+                    to={`/goals/${sg.id}`}
+                    className={`block bg-surface-700 rounded-lg p-3 hover:bg-surface-600 transition-colors ${isComplete ? 'opacity-60' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm">{sgTypeIcon}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className={`text-sm ${isComplete ? 'text-gray-500 line-through' : 'text-gray-100'}`}>
+                            {sg.title}
+                          </span>
+                          <span className="font-mono text-xs text-gray-400">
+                            {getSubGoalProgressText(sg)}
+                          </span>
+                        </div>
+                        <div className="h-1 bg-surface-500 rounded-full overflow-hidden mt-1">
+                          <div 
+                            className={`h-full rounded-full transition-all ${isComplete ? 'bg-accent-green' : 'bg-accent-amber'}`}
+                            style={{ width: `${sgPercent}%` }}
+                          />
                         </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-3 gap-3">

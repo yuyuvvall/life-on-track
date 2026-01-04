@@ -8,10 +8,14 @@ const router = Router();
 
 // Get all goals (top-level only, not sub-goals)
 router.get('/', (_req, res) => {
+  // Get goals that are NOT children in any relation
   const goals = db.prepare(`
-    SELECT * FROM goals 
-    WHERE is_active = 1 AND parent_id IS NULL 
-    ORDER BY created_at DESC
+    SELECT g.* FROM goals g
+    WHERE g.is_active = 1 
+      AND NOT EXISTS (
+        SELECT 1 FROM goal_relations gr WHERE gr.child_goal_id = g.id
+      )
+    ORDER BY g.created_at DESC
   `).all() as GoalRow[];
   res.json(goals.map(goalRowToGoal));
 });
@@ -39,19 +43,25 @@ router.get('/:id/stats', (req, res) => {
     SELECT * FROM goal_logs WHERE goal_id = ? ORDER BY log_date DESC LIMIT 30
   `).all(req.params.id) as GoalLogRow[];
 
-  // Get sub-goals
+  // Get sub-goals via junction table
   const subGoals = db.prepare(`
-    SELECT * FROM goals WHERE parent_id = ? AND is_active = 1 ORDER BY created_at ASC
+    SELECT g.* FROM goals g
+    INNER JOIN goal_relations gr ON gr.child_goal_id = g.id
+    WHERE gr.parent_goal_id = ? AND g.is_active = 1 
+    ORDER BY g.created_at ASC
   `).all(req.params.id) as GoalRow[];
 
   const stats = calculateGoalStats(goal, logs, subGoals);
   res.json(stats);
 });
 
-// Get sub-goals for a parent goal
+// Get sub-goals for a parent goal (via junction table)
 router.get('/:id/subgoals', (req, res) => {
   const subGoals = db.prepare(`
-    SELECT * FROM goals WHERE parent_id = ? AND is_active = 1 ORDER BY created_at ASC
+    SELECT g.* FROM goals g
+    INNER JOIN goal_relations gr ON gr.child_goal_id = g.id
+    WHERE gr.parent_goal_id = ? AND g.is_active = 1 
+    ORDER BY g.created_at ASC
   `).all(req.params.id) as GoalRow[];
   
   res.json(subGoals.map(goalRowToGoal));
@@ -68,7 +78,7 @@ router.get('/:id/logs', (req, res) => {
   res.json(logs.map(goalLogRowToGoalLog));
 });
 
-// Create goal (supports parentId for sub-goals)
+// Create goal (supports parentId for sub-goals via junction table)
 router.post('/', (req, res) => {
   const { 
     title, 
@@ -95,12 +105,12 @@ router.post('/', (req, res) => {
 
   const id = uuidv4();
   
+  // Insert the goal (no parent_id column used anymore)
   db.prepare(`
-    INSERT INTO goals (id, parent_id, title, goal_type, target_value, unit, total_pages, frequency_period, target_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO goals (id, title, goal_type, target_value, unit, total_pages, frequency_period, target_date)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
-    parentId || null,
     title, 
     goalType, 
     targetValue || 0, 
@@ -109,6 +119,14 @@ router.post('/', (req, res) => {
     goalType === 'frequency' ? (frequencyPeriod || 'weekly') : null,
     targetDate || null
   );
+
+  // If this is a sub-goal, create the relation
+  if (parentId) {
+    db.prepare(`
+      INSERT INTO goal_relations (parent_goal_id, child_goal_id, relation_type)
+      VALUES (?, ?, 'subgoal')
+    `).run(parentId, id);
+  }
 
   const goal = db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as GoalRow;
   res.status(201).json(goalRowToGoal(goal));

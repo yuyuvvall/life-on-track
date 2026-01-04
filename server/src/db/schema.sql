@@ -23,6 +23,19 @@ CREATE TABLE IF NOT EXISTS goals (
 
 CREATE INDEX IF NOT EXISTS idx_goals_parent ON goals(parent_id);
 
+-- 1a. Goal Relations (many-to-many junction table)
+CREATE TABLE IF NOT EXISTS goal_relations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    child_goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    relation_type TEXT DEFAULT 'subgoal',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(parent_goal_id, child_goal_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_goal_relations_parent ON goal_relations(parent_goal_id);
+CREATE INDEX IF NOT EXISTS idx_goal_relations_child ON goal_relations(child_goal_id);
+
 -- 1b. Progress Logs for Goals (tracks daily entries)
 CREATE TABLE IF NOT EXISTS goal_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
