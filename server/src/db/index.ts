@@ -48,16 +48,16 @@ export function getToday(): string {
   return new Date().toISOString().split('T')[0];
 }
 
-// Helper to get start of current week (Monday)
+// Helper to get start of current week (Sunday)
 export function getWeekStart(date?: Date): string {
   const d = date || new Date();
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(d.setDate(diff));
-  return monday.toISOString().split('T')[0];
+  const day = d.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  const diff = d.getDate() - day; // Go back to Sunday
+  const sunday = new Date(d.setDate(diff));
+  return sunday.toISOString().split('T')[0];
 }
 
-// Helper to get end of week (Sunday)
+// Helper to get end of week (Saturday)
 export function getWeekEnd(weekStart: string): string {
   const d = new Date(weekStart);
   d.setDate(d.getDate() + 6);
