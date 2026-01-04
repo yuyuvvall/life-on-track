@@ -15,6 +15,11 @@ export function GoalDetailView() {
   const [logNote, setLogNote] = useState('');
   const [showLogForm, setShowLogForm] = useState(false);
   const [showAddSubGoal, setShowAddSubGoal] = useState(false);
+  
+  // Habit-specific state
+  const [habitNote, setHabitNote] = useState('');
+  const [showHabitNoteFor, setShowHabitNoteFor] = useState<'did' | 'didnt' | null>(null);
+  const [historyFilter, setHistoryFilter] = useState<'positive' | 'negative' | null>(null);
 
   if (isLoading || !stats) {
     return (
@@ -38,6 +43,19 @@ export function GoalDetailView() {
           setLogValue('');
           setLogNote('');
           setShowLogForm(false);
+        },
+      }
+    );
+  };
+
+  // Habit goal: log with value 1 (did it) or 0 (didn't)
+  const handleHabitLog = (value: 0 | 1) => {
+    logProgress.mutate(
+      { id: goal.id, data: { value, note: habitNote || undefined } },
+      {
+        onSuccess: () => {
+          setHabitNote('');
+          setShowHabitNoteFor(null);
         },
       }
     );
@@ -254,8 +272,86 @@ export function GoalDetailView() {
           </div>
         </div>
 
-        {/* Log Progress Button */}
-        {!showLogForm && (
+        {/* Habit Goal: Did it / Didn't buttons */}
+        {goal.goalType === 'frequency' && (
+          <div className="space-y-3">
+            {!showHabitNoteFor ? (
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setShowHabitNoteFor('did')}
+                  disabled={logProgress.isPending}
+                  className="py-4 rounded-lg bg-accent-green/20 border-2 border-accent-green text-accent-green font-medium hover:bg-accent-green/30 transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Did it
+                </button>
+                <button
+                  onClick={() => setShowHabitNoteFor('didnt')}
+                  disabled={logProgress.isPending}
+                  className="py-4 rounded-lg bg-accent-red/20 border-2 border-accent-red text-accent-red font-medium hover:bg-accent-red/30 transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Didn't
+                </button>
+              </div>
+            ) : (
+              <div className="bg-surface-700 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-2">
+                  {showHabitNoteFor === 'did' ? (
+                    <span className="text-accent-green flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Completed
+                    </span>
+                  ) : (
+                    <span className="text-accent-red flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Missed
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={habitNote}
+                  onChange={(e) => setHabitNote(e.target.value)}
+                  placeholder="Add a note (optional)..."
+                  className="w-full"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowHabitNoteFor(null);
+                      setHabitNote('');
+                    }}
+                    className="btn btn-ghost flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleHabitLog(showHabitNoteFor === 'did' ? 1 : 0)}
+                    disabled={logProgress.isPending}
+                    className={`btn flex-1 ${showHabitNoteFor === 'did' ? 'bg-accent-green hover:bg-green-600' : 'bg-accent-red hover:bg-red-600'} text-white`}
+                  >
+                    {logProgress.isPending ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Log Progress Button (for non-frequency goals) */}
+        {goal.goalType !== 'frequency' && !showLogForm && (
           <button
             onClick={() => setShowLogForm(true)}
             className="w-full btn btn-primary py-3 text-base"
@@ -264,16 +360,14 @@ export function GoalDetailView() {
           </button>
         )}
 
-        {/* Log Form */}
-        {showLogForm && (
+        {/* Log Form (for non-frequency goals) */}
+        {goal.goalType !== 'frequency' && showLogForm && (
           <form onSubmit={handleLogSubmit} className="bg-surface-700 rounded-lg p-4 space-y-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1">
                 {goal.goalType === 'reading' 
                   ? 'Current Page' 
-                  : goal.goalType === 'frequency'
-                    ? 'Log Entry (1 = done)'
-                    : `Current ${goal.unit || 'Value'}`}
+                  : `Current ${goal.unit || 'Value'}`}
               </label>
               <input
                 type="number"
@@ -315,50 +409,119 @@ export function GoalDetailView() {
 
         {/* Progress History */}
         <div>
-          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
-            Progress History
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+              Progress History
+            </h2>
+
+            {/* Filter buttons for frequency goals */}
+            {goal.goalType === 'frequency' && (
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setHistoryFilter(historyFilter === 'positive' ? null : 'positive')}
+                  className={`py-1 px-2 rounded text-xs font-medium transition-colors flex items-center gap-1
+                    ${historyFilter === 'positive' 
+                      ? 'bg-accent-green/20 text-accent-green' 
+                      : 'bg-surface-700 text-gray-500 hover:bg-surface-600'}`}
+                  title="Filter completed only"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  {logs.filter(l => l.value === 1).length}
+                </button>
+                <button
+                  onClick={() => setHistoryFilter(historyFilter === 'negative' ? null : 'negative')}
+                  className={`py-1 px-2 rounded text-xs font-medium transition-colors flex items-center gap-1
+                    ${historyFilter === 'negative' 
+                      ? 'bg-accent-red/20 text-accent-red' 
+                      : 'bg-surface-700 text-gray-500 hover:bg-surface-600'}`}
+                  title="Filter missed only"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  {logs.filter(l => l.value === 0).length}
+                </button>
+              </div>
+            )}
+          </div>
           
-          {logs.length === 0 ? (
-            <div className="bg-surface-700 rounded-lg p-4 text-center text-gray-500 text-sm">
-              No logs yet. Start tracking your progress!
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {logs.map((log, index) => {
-                const prevLog = logs[index + 1];
-                const diff = prevLog ? log.value - prevLog.value : null;
-                
-                return (
-                  <div key={log.id} className="bg-surface-700 rounded-lg p-3 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(log.logDate).toLocaleDateString('en-US', { 
-                          weekday: 'short',
-                          month: 'short', 
-                          day: 'numeric' 
-                        })}
-                      </div>
-                      {log.note && (
-                        <div className="text-xs text-gray-400 mt-0.5 italic">"{log.note}"</div>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <div className="font-mono text-gray-100">
-                        {log.value}
-                        {goal.goalType === 'reading' && <span className="text-xs text-gray-500"> pg</span>}
-                      </div>
-                      {diff !== null && diff !== 0 && (
-                        <div className={`text-xs font-mono ${diff > 0 ? 'text-accent-green' : 'text-accent-red'}`}>
-                          {diff > 0 ? '+' : ''}{diff}
+          {(() => {
+            // Filter logs for frequency goals based on selected filter (null = show all)
+            const filteredLogs = goal.goalType === 'frequency' && historyFilter !== null
+              ? logs.filter(l => historyFilter === 'positive' ? l.value === 1 : l.value === 0)
+              : logs;
+
+            if (logs.length === 0) {
+              return (
+                <div className="bg-surface-700 rounded-lg p-4 text-center text-gray-500 text-sm">
+                  No logs yet. Start tracking your progress!
+                </div>
+              );
+            }
+
+            if (filteredLogs.length === 0) {
+              return (
+                <div className="bg-surface-700 rounded-lg p-4 text-center text-gray-500 text-sm">
+                  {historyFilter === 'positive' ? 'No completed entries yet.' : 'No missed entries. Great job!'}
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-2">
+                {filteredLogs.map((log, index) => {
+                  const prevLog = filteredLogs[index + 1];
+                  const diff = prevLog ? log.value - prevLog.value : null;
+                  const isPositive = log.value === 1;
+                  
+                  return (
+                    <div 
+                      key={log.id} 
+                      className={`bg-surface-700 rounded-lg p-3 flex items-center justify-between ${
+                        goal.goalType === 'frequency' 
+                          ? `border-l-4 ${isPositive ? 'border-accent-green' : 'border-accent-red'}`
+                          : ''
+                      }`}
+                    >
+                      <div>
+                        <div className="text-xs text-gray-500">
+                          {new Date(log.logDate).toLocaleDateString('en-US', { 
+                            weekday: 'short',
+                            month: 'short', 
+                            day: 'numeric' 
+                          })}
                         </div>
-                      )}
+                        {log.note && (
+                          <div className="text-xs text-gray-400 mt-0.5 italic">"{log.note}"</div>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        {goal.goalType === 'frequency' ? (
+                          <div className={`text-sm font-medium ${isPositive ? 'text-accent-green' : 'text-accent-red'}`}>
+                            {isPositive ? '✓ Done' : '✗ Missed'}
+                          </div>
+                        ) : (
+                          <>
+                            <div className="font-mono text-gray-100">
+                              {log.value}
+                              {goal.goalType === 'reading' && <span className="text-xs text-gray-500"> pg</span>}
+                            </div>
+                            {diff !== null && diff !== 0 && (
+                              <div className={`text-xs font-mono ${diff > 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                                {diff > 0 ? '+' : ''}{diff}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       </main>
 

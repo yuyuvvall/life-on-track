@@ -217,7 +217,7 @@ router.post('/:id/logs', (req, res) => {
     // For reading, value is current page
     db.prepare('UPDATE goals SET current_page = ? WHERE id = ?').run(value, id);
   } else if (goal.goal_type === 'frequency') {
-    // For frequency, increment or set based on period
+    // For frequency, only count value=1 logs (completed entries)
     const periodStart = goal.frequency_period === 'weekly' 
       ? getWeekStart() 
       : goal.frequency_period === 'monthly'
@@ -226,7 +226,7 @@ router.post('/:id/logs', (req, res) => {
     
     const periodLogs = db.prepare(`
       SELECT COUNT(*) as count FROM goal_logs 
-      WHERE goal_id = ? AND log_date >= ?
+      WHERE goal_id = ? AND log_date >= ? AND value = 1
     `).get(id, periodStart) as { count: number };
     
     db.prepare('UPDATE goals SET current_value = ? WHERE id = ?').run(periodLogs.count, id);
@@ -307,14 +307,14 @@ function calculateGoalStats(goal: GoalRow, logs: GoalLogRow[], subGoalRows: Goal
       }
     }
   } else if (goal.goal_type === 'frequency') {
-    // Calculate period progress
+    // Calculate period progress - only count value=1 (completed) logs
     const periodStart = goal.frequency_period === 'weekly' 
       ? getWeekStart() 
       : goal.frequency_period === 'monthly'
         ? new Date().toISOString().slice(0, 7) + '-01'
         : new Date().toISOString().split('T')[0];
     
-    const periodLogs = logs.filter(l => l.log_date >= periodStart);
+    const periodLogs = logs.filter(l => l.log_date >= periodStart && l.value === 1);
     periodProgress = {
       current: periodLogs.length,
       target: goal.target_value,

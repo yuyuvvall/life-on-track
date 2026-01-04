@@ -44,12 +44,12 @@ console.log(`[Database] Connected to: ${dbPath}`);
 export default db;
 
 // Helper to get current date in YYYY-MM-DD format
-export function getToday(): string {
+export const getToday = (): string => {
   return new Date().toISOString().split('T')[0];
 }
 
 // Helper to get start of current week (Sunday)
-export function getWeekStart(date?: Date): string {
+export const getWeekStart = (date?: Date): string => {
   const d = date || new Date();
   const day = d.getDay(); // 0 = Sunday, 1 = Monday, etc.
   const diff = d.getDate() - day; // Go back to Sunday
@@ -58,7 +58,7 @@ export function getWeekStart(date?: Date): string {
 }
 
 // Helper to get end of week (Saturday)
-export function getWeekEnd(weekStart: string): string {
+export const getWeekEnd = (weekStart: string): string => {
   const d = new Date(weekStart);
   d.setDate(d.getDate() + 6);
   return d.toISOString().split('T')[0];
