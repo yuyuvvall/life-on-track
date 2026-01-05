@@ -6,111 +6,156 @@ import { workLogRowToWorkLog } from '../types.js';
 const router = Router();
 
 // Get all work logs
-router.get('/', (_req, res) => {
-  const logs = db.prepare(`
-    SELECT * FROM work_logs ORDER BY log_date DESC
-  `).all() as WorkLogRow[];
-
-  res.json(logs.map(workLogRowToWorkLog));
+router.get('/', async (_req, res) => {
+  try {
+    const result = await db.execute('SELECT * FROM work_logs ORDER BY log_date DESC');
+    const logs = result.rows as unknown as WorkLogRow[];
+    res.json(logs.map(workLogRowToWorkLog));
+  } catch (err) {
+    res.status(500).json({ message: (err as Error).message });
+  }
 });
 
 // Get today's work log
-router.get('/today', (_req, res) => {
-  const today = getToday();
-  const log = db.prepare('SELECT * FROM work_logs WHERE log_date = ?').get(today) as WorkLogRow | undefined;
-  
-  res.json(log ? workLogRowToWorkLog(log) : null);
+router.get('/today', async (_req, res) => {
+  try {
+    const today = getToday();
+    const result = await db.execute({
+      sql: 'SELECT * FROM work_logs WHERE log_date = ?',
+      args: [today]
+    });
+    
+    const log = result.rows[0] as unknown as WorkLogRow | undefined;
+    res.json(log ? workLogRowToWorkLog(log) : null);
+  } catch (err) {
+    res.status(500).json({ message: (err as Error).message });
+  }
 });
 
 // Get work log by date
-router.get('/date/:date', (req, res) => {
-  const log = db.prepare('SELECT * FROM work_logs WHERE log_date = ?')
-    .get(req.params.date) as WorkLogRow | undefined;
-  
-  res.json(log ? workLogRowToWorkLog(log) : null);
+router.get('/date/:date', async (req, res) => {
+  try {
+    const result = await db.execute({
+      sql: 'SELECT * FROM work_logs WHERE log_date = ?',
+      args: [req.params.date]
+    });
+    
+    const log = result.rows[0] as unknown as WorkLogRow | undefined;
+    res.json(log ? workLogRowToWorkLog(log) : null);
+  } catch (err) {
+    res.status(500).json({ message: (err as Error).message });
+  }
 });
 
 // Create or update work log
-router.post('/', (req, res) => {
-  const { logDate, integrityScore, missedOpportunityNote, successNote } = req.body;
-  const date = logDate || getToday();
+router.post('/', async (req, res) => {
+  try {
+    const { logDate, integrityScore, missedOpportunityNote, successNote } = req.body;
+    const date = logDate || getToday();
 
-  // Validate integrity score
-  if (integrityScore !== 0 && integrityScore !== 1) {
-    return res.status(400).json({ message: 'Integrity score must be 0 or 1' });
-  }
+    // Validate integrity score
+    if (integrityScore !== 0 && integrityScore !== 1) {
+      return res.status(400).json({ message: 'Integrity score must be 0 or 1' });
+    }
 
-  // If score is 0, require missed opportunity note
-  if (integrityScore === 0 && !missedOpportunityNote) {
-    return res.status(400).json({ 
-      message: 'Missed opportunity note is required when integrity score is 0' 
+    // If score is 0, require missed opportunity note
+    if (integrityScore === 0 && !missedOpportunityNote) {
+      return res.status(400).json({ 
+        message: 'Missed opportunity note is required when integrity score is 0' 
+      });
+    }
+
+    // Check if log exists for this date
+    const existingResult = await db.execute({
+      sql: 'SELECT * FROM work_logs WHERE log_date = ?',
+      args: [date]
     });
+    const existing = existingResult.rows[0] as unknown as WorkLogRow | undefined;
+
+    if (existing) {
+      await db.execute({
+        sql: `UPDATE work_logs 
+              SET integrity_score = ?, missed_opportunity_note = ?, success_note = ?
+              WHERE log_date = ?`,
+        args: [integrityScore, missedOpportunityNote || null, successNote || null, date]
+      });
+    } else {
+      await db.execute({
+        sql: `INSERT INTO work_logs (log_date, integrity_score, missed_opportunity_note, success_note)
+              VALUES (?, ?, ?, ?)`,
+        args: [date, integrityScore, missedOpportunityNote || null, successNote || null]
+      });
+    }
+
+    const logResult = await db.execute({
+      sql: 'SELECT * FROM work_logs WHERE log_date = ?',
+      args: [date]
+    });
+    const log = logResult.rows[0] as unknown as WorkLogRow;
+    res.status(existing ? 200 : 201).json(workLogRowToWorkLog(log));
+  } catch (err) {
+    res.status(500).json({ message: (err as Error).message });
   }
-
-  // Check if log exists for this date
-  const existing = db.prepare('SELECT * FROM work_logs WHERE log_date = ?').get(date) as WorkLogRow | undefined;
-
-  if (existing) {
-    db.prepare(`
-      UPDATE work_logs 
-      SET integrity_score = ?, missed_opportunity_note = ?, success_note = ?
-      WHERE log_date = ?
-    `).run(integrityScore, missedOpportunityNote || null, successNote || null, date);
-  } else {
-    db.prepare(`
-      INSERT INTO work_logs (log_date, integrity_score, missed_opportunity_note, success_note)
-      VALUES (?, ?, ?, ?)
-    `).run(date, integrityScore, missedOpportunityNote || null, successNote || null);
-  }
-
-  const log = db.prepare('SELECT * FROM work_logs WHERE log_date = ?').get(date) as WorkLogRow;
-  res.status(existing ? 200 : 201).json(workLogRowToWorkLog(log));
 });
 
 // Update work log
-router.patch('/:id', (req, res) => {
-  const { id } = req.params;
-  const { integrityScore, missedOpportunityNote, successNote } = req.body;
+router.patch('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { integrityScore, missedOpportunityNote, successNote } = req.body;
 
-  const existing = db.prepare('SELECT * FROM work_logs WHERE id = ?').get(id) as WorkLogRow | undefined;
-  if (!existing) {
-    return res.status(404).json({ message: 'Work log not found' });
-  }
-
-  // If updating score to 0, require note
-  const newScore = integrityScore ?? existing.integrity_score;
-  const newNote = missedOpportunityNote ?? existing.missed_opportunity_note;
-  
-  if (newScore === 0 && !newNote) {
-    return res.status(400).json({ 
-      message: 'Missed opportunity note is required when integrity score is 0' 
+    const existingResult = await db.execute({
+      sql: 'SELECT * FROM work_logs WHERE id = ?',
+      args: [id]
     });
-  }
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Work log not found' });
+    }
+    const existing = existingResult.rows[0] as unknown as WorkLogRow;
 
-  const updates: string[] = [];
-  const values: unknown[] = [];
+    // If updating score to 0, require note
+    const newScore = integrityScore ?? existing.integrity_score;
+    const newNote = missedOpportunityNote ?? existing.missed_opportunity_note;
+    
+    if (newScore === 0 && !newNote) {
+      return res.status(400).json({ 
+        message: 'Missed opportunity note is required when integrity score is 0' 
+      });
+    }
 
-  if (integrityScore !== undefined) {
-    updates.push('integrity_score = ?');
-    values.push(integrityScore);
-  }
-  if (missedOpportunityNote !== undefined) {
-    updates.push('missed_opportunity_note = ?');
-    values.push(missedOpportunityNote);
-  }
-  if (successNote !== undefined) {
-    updates.push('success_note = ?');
-    values.push(successNote);
-  }
+    const updates: string[] = [];
+    const values: (string | number | null)[] = [];
 
-  if (updates.length > 0) {
-    values.push(id);
-    db.prepare(`UPDATE work_logs SET ${updates.join(', ')} WHERE id = ?`).run(...values);
-  }
+    if (integrityScore !== undefined) {
+      updates.push('integrity_score = ?');
+      values.push(integrityScore);
+    }
+    if (missedOpportunityNote !== undefined) {
+      updates.push('missed_opportunity_note = ?');
+      values.push(missedOpportunityNote);
+    }
+    if (successNote !== undefined) {
+      updates.push('success_note = ?');
+      values.push(successNote);
+    }
 
-  const log = db.prepare('SELECT * FROM work_logs WHERE id = ?').get(id) as WorkLogRow;
-  res.json(workLogRowToWorkLog(log));
+    if (updates.length > 0) {
+      values.push(parseInt(id));
+      await db.execute({
+        sql: `UPDATE work_logs SET ${updates.join(', ')} WHERE id = ?`,
+        args: values
+      });
+    }
+
+    const logResult = await db.execute({
+      sql: 'SELECT * FROM work_logs WHERE id = ?',
+      args: [id]
+    });
+    const log = logResult.rows[0] as unknown as WorkLogRow;
+    res.json(workLogRowToWorkLog(log));
+  } catch (err) {
+    res.status(500).json({ message: (err as Error).message });
+  }
 });
 
 export default router;
-

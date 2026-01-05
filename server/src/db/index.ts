@@ -1,52 +1,147 @@
-import Database, { Database as DatabaseType } from 'better-sqlite3';
-import { readFileSync, mkdirSync, existsSync } from 'fs';
-import { join, dirname, isAbsolute } from 'path';
-import { fileURLToPath } from 'url';
+import { createClient, Client } from '@libsql/client';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// Get database URL from environment
+// Local: file:./data/auditor.db
+// Turso: libsql://your-db.turso.io
+const DATABASE_URL = process.env.DATABASE_URL || 'file:./data/auditor.db';
+const DATABASE_AUTH_TOKEN = process.env.DATABASE_AUTH_TOKEN;
 
-// Get database path from environment or use default
-const DATABASE_URL = process.env.DATABASE_URL || './data/auditor.db';
+// Create database client
+const db: Client = createClient({
+  url: DATABASE_URL,
+  authToken: DATABASE_AUTH_TOKEN,
+});
 
-// Resolve the database path
-function resolveDatabasePath(dbUrl: string): string {
-  // If it's an absolute path, use it directly
-  if (isAbsolute(dbUrl)) {
-    return dbUrl;
+// Schema embedded directly to avoid file system issues in production
+const SCHEMA = `
+-- 1. Goals Table
+CREATE TABLE IF NOT EXISTS goals (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT REFERENCES goals(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    goal_type TEXT DEFAULT 'frequency' CHECK (goal_type IN ('reading', 'frequency', 'numeric')),
+    target_value INTEGER NOT NULL DEFAULT 0,
+    unit TEXT,
+    current_value INTEGER DEFAULT 0,
+    total_pages INTEGER,
+    current_page INTEGER DEFAULT 0,
+    frequency_period TEXT CHECK (frequency_period IN ('daily', 'weekly', 'monthly')),
+    start_date DATE DEFAULT CURRENT_DATE,
+    target_date DATE,
+    is_active BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_goals_parent ON goals(parent_id);
+
+-- 1a. Goal Relations (many-to-many junction table)
+CREATE TABLE IF NOT EXISTS goal_relations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    child_goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    relation_type TEXT DEFAULT 'subgoal',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(parent_goal_id, child_goal_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_goal_relations_parent ON goal_relations(parent_goal_id);
+CREATE INDEX IF NOT EXISTS idx_goal_relations_child ON goal_relations(child_goal_id);
+
+-- 1b. Progress Logs for Goals
+CREATE TABLE IF NOT EXISTS goal_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    log_date DATE NOT NULL,
+    value INTEGER NOT NULL,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(goal_id, log_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_goal_logs_goal ON goal_logs(goal_id);
+CREATE INDEX IF NOT EXISTS idx_goal_logs_date ON goal_logs(log_date);
+
+-- 2. Tasks
+CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    category TEXT DEFAULT 'Personal' CHECK (category IN ('Work', 'Admin', 'Personal')),
+    deadline DATETIME,
+    is_completed BOOLEAN DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. SubTasks
+CREATE TABLE IF NOT EXISTS subtasks (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    completed BOOLEAN DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. Work Logs
+CREATE TABLE IF NOT EXISTS work_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    log_date DATE UNIQUE NOT NULL,
+    integrity_score INTEGER CHECK (integrity_score IN (0, 1)),
+    missed_opportunity_note TEXT,
+    success_note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. Expenses
+CREATE TABLE IF NOT EXISTS expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount REAL NOT NULL,
+    category TEXT NOT NULL,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Weekly Reflections
+CREATE TABLE IF NOT EXISTS weekly_reflections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    week_start DATE NOT NULL,
+    reflection_text TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks(deadline);
+CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category);
+CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id);
+CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id);
+CREATE INDEX IF NOT EXISTS idx_work_logs_date ON work_logs(log_date);
+CREATE INDEX IF NOT EXISTS idx_expenses_created ON expenses(created_at);
+`;
+
+// Initialize schema on startup
+async function initializeDatabase() {
+  // Split schema into individual statements and execute each
+  const statements = SCHEMA
+    .split(';')
+    .map(s => s.trim())
+    .filter(s => s.length > 0 && !s.startsWith('--'));
+  
+  for (const statement of statements) {
+    await db.execute(statement);
   }
   
-  // If it's a relative path, resolve from server root (parent of src)
-  const serverRoot = join(__dirname, '../..');
-  return join(serverRoot, dbUrl);
+  console.log(`[Database] Connected to: ${DATABASE_URL}`);
 }
 
-const dbPath = resolveDatabasePath(DATABASE_URL);
+// Initialize database (called from server startup)
+export const initDb = initializeDatabase;
 
-// Ensure the directory exists for local SQLite files
-const dbDir = dirname(dbPath);
-if (!existsSync(dbDir)) {
-  mkdirSync(dbDir, { recursive: true });
-}
-
-// Create database connection
-const db: DatabaseType = new Database(dbPath);
-
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
-
-// Initialize schema
-const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
-db.exec(schema);
-
-// Log database location on startup
-console.log(`[Database] Connected to: ${dbPath}`);
-
+// Export client for queries
 export default db;
 
 // Helper to get current date in YYYY-MM-DD format
 export const getToday = (): string => {
   return new Date().toISOString().split('T')[0];
-}
+};
 
 // Helper to get start of current week (Sunday)
 export const getWeekStart = (date?: Date): string => {
@@ -55,11 +150,11 @@ export const getWeekStart = (date?: Date): string => {
   const diff = d.getDate() - day; // Go back to Sunday
   const sunday = new Date(d.setDate(diff));
   return sunday.toISOString().split('T')[0];
-}
+};
 
 // Helper to get end of week (Saturday)
 export const getWeekEnd = (weekStart: string): string => {
   const d = new Date(weekStart);
   d.setDate(d.getDate() + 6);
   return d.toISOString().split('T')[0];
-}
+};
