@@ -119,17 +119,35 @@ CREATE INDEX IF NOT EXISTS idx_expenses_created ON expenses(created_at);
 
 // Initialize schema on startup
 async function initializeDatabase() {
+  console.log(`[Database] Initializing database at: ${DATABASE_URL}`);
+  
   // Split schema into individual statements and execute each
-  const statements = SCHEMA
+  // Remove comments and split by semicolon
+  const cleanSchema = SCHEMA
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => !line.startsWith('--'))
+    .join('\n');
+  
+  const statements = cleanSchema
     .split(';')
     .map(s => s.trim())
-    .filter(s => s.length > 0 && !s.startsWith('--'));
+    .filter(s => s.length > 0);
   
-  for (const statement of statements) {
-    await db.execute(statement);
+  console.log(`[Database] Executing ${statements.length} schema statements...`);
+  
+  for (let i = 0; i < statements.length; i++) {
+    const statement = statements[i];
+    try {
+      await db.execute(statement);
+    } catch (err) {
+      console.error(`[Database] Error executing statement ${i + 1}:`, statement.slice(0, 50) + '...');
+      console.error(`[Database] Error:`, (err as Error).message);
+      throw err;
+    }
   }
   
-  console.log(`[Database] Connected to: ${DATABASE_URL}`);
+  console.log(`[Database] Schema initialized successfully`);
 }
 
 // Initialize database (called from server startup)
