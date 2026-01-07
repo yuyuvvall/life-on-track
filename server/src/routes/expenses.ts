@@ -27,10 +27,10 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Create expense (Quick-Add: only amount and category required)
+// Create expense (Quick-Add: amount, category, optional note and date)
 router.post('/', async (req, res) => {
   try {
-    const { amount, category, note } = req.body;
+    const { amount, category, note, createdAt } = req.body;
 
     if (amount === undefined || amount === null) {
       return res.status(400).json({ message: 'Amount is required' });
@@ -40,9 +40,12 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Category is required' });
     }
 
+    // Use provided date or default to now
+    const timestamp = createdAt || new Date().toISOString();
+
     const result = await db.execute({
-      sql: 'INSERT INTO expenses (amount, category, note) VALUES (?, ?, ?)',
-      args: [amount, category, note || null]
+      sql: 'INSERT INTO expenses (amount, category, note, created_at) VALUES (?, ?, ?, ?)',
+      args: [amount, category, note || null, timestamp]
     });
 
     const expenseResult = await db.execute({

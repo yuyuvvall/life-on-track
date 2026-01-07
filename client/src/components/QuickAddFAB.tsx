@@ -1,7 +1,9 @@
 import { useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '@/store/uiStore';
 
 export function QuickAddFAB() {
+  const navigate = useNavigate();
   const { openQuickAdd } = useUIStore();
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
@@ -20,9 +22,10 @@ export function QuickAddFAB() {
       longPressTimer.current = null;
     }
     if (!isLongPress.current) {
-      openQuickAdd('expense');
+      // Navigate to expense quick add page
+      navigate('/expense/add');
     }
-  }, [openQuickAdd]);
+  }, [navigate]);
 
   const handleMouseDown = useCallback(() => {
     isLongPress.current = false;
@@ -38,9 +41,10 @@ export function QuickAddFAB() {
       longPressTimer.current = null;
     }
     if (!isLongPress.current) {
-      openQuickAdd('expense');
+      // Navigate to expense quick add page
+      navigate('/expense/add');
     }
-  }, [openQuickAdd]);
+  }, [navigate]);
 
   const handleMouseLeave = useCallback(() => {
     if (longPressTimer.current) {
@@ -68,4 +72,3 @@ export function QuickAddFAB() {
     </button>
   );
 }
-

@@ -123,6 +123,7 @@ export interface CreateExpenseRequest {
   amount: number;
   category: string;
   note?: string;
+  createdAt?: string;
 }
 
 export interface CreateGoalRequest {

@@ -3,6 +3,7 @@ import { PulseDashboard } from '@/views/PulseDashboard';
 import { ClosingEventView } from '@/views/ClosingEventView';
 import { GoalsSummaryView } from '@/views/GoalsSummaryView';
 import { GoalDetailView } from '@/views/GoalDetailView';
+import { ExpenseQuickAdd } from '@/views/ExpenseQuickAdd';
 import { QuickAddModal } from '@/components/QuickAddModal';
 import { IntegrityModal } from '@/components/IntegrityModal';
 
@@ -14,6 +15,7 @@ function App() {
         <Route path="/weekly" element={<ClosingEventView />} />
         <Route path="/goals" element={<GoalsSummaryView />} />
         <Route path="/goals/:id" element={<GoalDetailView />} />
+        <Route path="/expense/add" element={<ExpenseQuickAdd />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       
