@@ -56,9 +56,6 @@ export function ClosingEventView() {
       <header className="sticky top-0 z-30 bg-surface-900/95 backdrop-blur-sm border-b border-surface-700">
         <div className="px-4 py-3 flex items-center justify-between">
           <div>
-            <Link to="/" className="text-xs text-accent-blue hover:text-blue-400">
-              ← Pulse
-            </Link>
             <h1 className="text-lg font-semibold text-gray-100 mt-1">
               Weekly Closing Event
             </h1>
