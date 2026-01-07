@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { useWeeklySummary } from '@/hooks';
 import { IntegrityHeatmap } from '@/components/IntegrityHeatmap';
