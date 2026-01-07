@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { WeeklyStats } from '@/components/WeeklyStats';
 import { FocusList } from '@/components/FocusList';
 import { IntegrityLogger } from '@/components/IntegrityLogger';
@@ -30,27 +29,11 @@ export function PulseDashboard() {
   return (
     <div className="min-h-screen bg-surface-900 pb-24">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-surface-900/95 backdrop-blur-sm border-b border-surface-700">
+      <header className="bg-surface-900/95 border-b border-surface-700">
         <div className="px-4 py-3">
-          <div className="flex items-center justify-between mb-3">
-            <h1 className="text-lg font-semibold text-gray-100 tracking-tight">
-              The Auditor
-            </h1>
-            <div className="flex gap-3">
-              <Link 
-                to="/goals" 
-                className="text-xs text-accent-amber hover:text-amber-400 font-medium"
-              >
-                Goals
-              </Link>
-              <Link 
-                to="/weekly" 
-                className="text-xs text-accent-blue hover:text-blue-400 font-medium"
-              >
-                Weekly →
-              </Link>
-            </div>
-          </div>
+          <h1 className="text-lg font-semibold text-gray-100 tracking-tight mb-3">
+            The Auditor
+          </h1>
           
           {/* Weekly Stats - horizontal scroll */}
           <WeeklyStats />

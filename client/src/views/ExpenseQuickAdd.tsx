@@ -77,12 +77,12 @@ export function ExpenseQuickAdd() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200 flex flex-col">
+    <div className="min-h-screen bg-surface-900 flex flex-col">
       {/* Header */}
-      <header className="bg-gray-100 px-4 py-3 flex items-center justify-between">
+      <header className="bg-surface-800 px-4 py-3 flex items-center justify-between border-b border-surface-700">
         <button 
           onClick={() => navigate(-1)}
-          className="p-2 -ml-2 text-gray-600 hover:text-gray-900"
+          className="p-2 -ml-2 text-gray-400 hover:text-gray-200"
         >
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -90,7 +90,7 @@ export function ExpenseQuickAdd() {
         </button>
         <button 
           onClick={() => setShowDatePicker(true)}
-          className="flex items-center gap-1 text-gray-700 font-medium"
+          className="flex items-center gap-1 text-gray-200 font-medium"
         >
           {formatDate(selectedDate).split(',')[0]}
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -100,25 +100,25 @@ export function ExpenseQuickAdd() {
       </header>
 
       {/* Category Scroll */}
-      <div className="bg-gray-100 px-2 py-3">
+      <div className="bg-surface-800 px-2 py-3">
         <div className="flex flex-wrap gap-3 overflow-x-auto pb-2 scrollbar-hide">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setCategory(cat.id)}
-              className={`flex flex-col items-center min-w-[70px] transition-transform  p-1${
+              className={`flex flex-col items-center min-w-[70px] transition-transform p-1 ${
                 category === cat.id ? 'scale-110' : ''
               }`}
             >
               <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl
                 ${category === cat.id 
                   ? `${cat.color} text-white shadow-lg` 
-                  : 'bg-gray-200 text-gray-500'}`}
+                  : 'bg-surface-600 text-gray-400'}`}
               >
                 {cat.icon}
               </div>
               <span className={`text-xs mt-1 ${
-                category === cat.id ? 'text-blue-600 font-medium' : 'text-gray-500'
+                category === cat.id ? 'text-accent-blue font-medium' : 'text-gray-500'
               }`}>
                 {cat.id}
               </span>
@@ -128,21 +128,21 @@ export function ExpenseQuickAdd() {
       </div>
 
       {/* Selected Category Banner */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 flex items-center justify-between">
+      <div className="bg-gradient-to-r from-accent-blue to-indigo-600 px-4 py-3 flex items-center justify-between">
         <div>
           <p className="text-blue-200 text-xs">Category</p>
           <p className="text-white text-xl font-semibold">{category}</p>
         </div>
-        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl shadow-lg">
+        <div className="w-12 h-12 bg-surface-800 rounded-full flex items-center justify-center text-2xl shadow-lg">
           {selectedCat.icon}
         </div>
       </div>
 
       {/* Amount Display */}
-      <div className="flex-1 bg-white flex flex-col items-center justify-center px-4">
-        <p className="text-blue-600 text-sm mb-1">Expense</p>
-        <p className="text-5xl font-light text-blue-600">
-          <span className="text-3xl">₪</span> {amount}
+      <div className="flex-1 bg-surface-900 flex flex-col items-center justify-center px-4">
+        <p className="text-accent-blue text-sm mb-1">Expense</p>
+        <p className="text-5xl font-light text-gray-100">
+          <span className="text-3xl text-accent-blue">₪</span> {amount}
         </p>
         
         {/* Notes Input */}
@@ -151,44 +151,44 @@ export function ExpenseQuickAdd() {
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Notes..."
-          className="mt-4 w-full max-w-xs text-center bg-gray-100 border-0 rounded-xl px-4 py-3 text-gray-600 placeholder-gray-400"
+          className="mt-4 w-full max-w-xs text-center bg-surface-700 border-0 rounded-xl px-4 py-3 text-gray-200 placeholder-gray-500"
         />
       </div>
 
       {/* Custom Keypad */}
-      <div className="bg-gray-100 p-2">
+      <div className="bg-surface-800 p-2">
         <div className="grid grid-cols-5 gap-1">
           {/* Row 1 */}
-          <KeypadButton label="÷" onClick={() => {}} disabled className="text-gray-400" />
+          <KeypadButton label="÷" onClick={() => {}} disabled className="text-gray-600" />
           <KeypadButton label="7" onClick={() => handleKeyPress('7')} />
           <KeypadButton label="8" onClick={() => handleKeyPress('8')} />
           <KeypadButton label="9" onClick={() => handleKeyPress('9')} />
           <KeypadButton 
             label="⌫" 
             onClick={() => handleKeyPress('backspace')} 
-            className="text-gray-600"
+            className="text-accent-red"
           />
 
           {/* Row 2 */}
-          <KeypadButton label="×" onClick={() => {}} disabled className="text-gray-400" />
+          <KeypadButton label="×" onClick={() => {}} disabled className="text-gray-600" />
           <KeypadButton label="4" onClick={() => handleKeyPress('4')} />
           <KeypadButton label="5" onClick={() => handleKeyPress('5')} />
           <KeypadButton label="6" onClick={() => handleKeyPress('6')} />
           <KeypadButton 
             label="📅" 
             onClick={() => setShowDatePicker(true)}
-            className="text-gray-600"
+            className="text-accent-amber"
           />
 
           {/* Row 3 */}
-          <KeypadButton label="−" onClick={() => {}} disabled className="text-gray-400" />
+          <KeypadButton label="−" onClick={() => {}} disabled className="text-gray-600" />
           <KeypadButton label="1" onClick={() => handleKeyPress('1')} />
           <KeypadButton label="2" onClick={() => handleKeyPress('2')} />
           <KeypadButton label="3" onClick={() => handleKeyPress('3')} />
           <button
             onClick={handleSubmit}
             disabled={createExpense.isPending || parseFloat(amount) <= 0}
-            className="row-span-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-xl flex items-center justify-center transition-colors"
+            className="row-span-2 bg-accent-green hover:bg-emerald-600 disabled:bg-surface-600 text-white rounded-xl flex items-center justify-center transition-colors"
           >
             {createExpense.isPending ? (
               <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -203,15 +203,15 @@ export function ExpenseQuickAdd() {
           </button>
 
           {/* Row 4 */}
-          <KeypadButton label="+" onClick={() => {}} disabled className="text-gray-400" />
-          <KeypadButton label="₪" onClick={() => {}} disabled className="text-gray-400" />
+          <KeypadButton label="+" onClick={() => {}} disabled className="text-gray-600" />
+          <KeypadButton label="₪" onClick={() => {}} disabled className="text-gray-600" />
           <KeypadButton label="0" onClick={() => handleKeyPress('0')} />
           <KeypadButton label="." onClick={() => handleKeyPress('.')} />
         </div>
       </div>
 
       {/* Date Footer */}
-      <div className="bg-gray-100 text-center py-2 text-gray-500 text-sm">
+      <div className="bg-surface-800 text-center py-2 text-gray-400 text-sm border-t border-surface-700">
         {formatDate(selectedDate)}
       </div>
 
@@ -256,9 +256,9 @@ function KeypadButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`h-14 bg-white rounded-xl text-xl font-medium text-gray-800 
-        hover:bg-gray-50 active:bg-gray-100 disabled:text-gray-300 
-        disabled:hover:bg-white transition-colors ${className}`}
+      className={`h-14 bg-surface-700 rounded-xl text-xl font-medium text-gray-200 
+        hover:bg-surface-600 active:bg-surface-500 disabled:text-gray-600 
+        disabled:hover:bg-surface-700 transition-colors ${className}`}
     >
       {label}
     </button>
@@ -345,26 +345,26 @@ function DatePickerModal({
 
   return (
     <div 
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
       onClick={onCancel}
     >
       <div 
-        className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl"
+        className="bg-surface-800 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-surface-700"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-5 pb-3">
+        <div className="p-5 pb-3 border-b border-surface-700">
           <p className="text-gray-500 text-sm">Select day</p>
-          <p className="text-3xl font-light text-gray-900 mt-1">
+          <p className="text-3xl font-light text-gray-100 mt-1">
             {formatSelectedDate(tempDate)}
           </p>
         </div>
 
         {/* Calendar */}
-        <div className="px-4 pb-4">
+        <div className="px-4 pb-4 pt-4">
           {/* Month Navigation */}
           <div className="flex items-center justify-between mb-4">
-            <button className="flex items-center gap-1 text-gray-700">
+            <button className="flex items-center gap-1 text-gray-200">
               {MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -373,17 +373,17 @@ function DatePickerModal({
             <div className="flex gap-2">
               <button 
                 onClick={handlePrevMonth}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="p-2 hover:bg-surface-700 rounded-full"
               >
-                <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
               <button 
                 onClick={handleNextMonth}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="p-2 hover:bg-surface-700 rounded-full"
               >
-                <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
@@ -408,10 +408,10 @@ function DatePickerModal({
                     onClick={() => handleDayClick(day)}
                     className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-colors
                       ${isSelected(day) 
-                        ? 'bg-indigo-500 text-white' 
+                        ? 'bg-accent-blue text-white' 
                         : isToday(day)
-                          ? 'text-indigo-600 font-bold'
-                          : 'text-gray-700 hover:bg-gray-100'
+                          ? 'text-accent-blue font-bold'
+                          : 'text-gray-300 hover:bg-surface-700'
                       }`}
                   >
                     {day}
@@ -426,13 +426,13 @@ function DatePickerModal({
         <div className="flex justify-end gap-2 px-4 pb-4">
           <button
             onClick={onCancel}
-            className="px-6 py-2 text-indigo-600 font-medium hover:bg-indigo-50 rounded-lg transition-colors"
+            className="px-6 py-2 text-gray-400 font-medium hover:text-gray-200 hover:bg-surface-700 rounded-lg transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={() => onSelect(tempDate)}
-            className="px-6 py-2 text-indigo-600 font-medium hover:bg-indigo-50 rounded-lg transition-colors"
+            className="px-6 py-2 text-accent-blue font-medium hover:bg-surface-700 rounded-lg transition-colors"
           >
             OK
           </button>
