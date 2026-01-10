@@ -17,7 +17,9 @@ export function QuickAddFAB() {
     }, 500);
   }, [navigate]);
 
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    // Prevent synthetic click event from firing after touchend
+    e.preventDefault();
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
