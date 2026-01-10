@@ -1,5 +1,5 @@
 import { createClient, Client } from '@libsql/client';
-import { createTrackedExecute, queryLoggerMiddleware, setCurrentEndpoint, clearCurrentEndpoint } from './queryLogger';
+import { createTrackedExecute, queryLoggerMiddleware, setCurrentEndpoint, clearCurrentEndpoint } from './queryLogger.js';
 
 // Get database URL from environment
 // Local: file:./data/auditor.db
