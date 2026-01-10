@@ -1,22 +1,37 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import db, { getWeekStart } from '../db/index.js';
+import db, { getWeekStart, trackedExecute } from '../db/index.js';
 import type { GoalRow, GoalLogRow, GoalStats } from '../types.js';
 import { goalRowToGoal, goalLogRowToGoalLog } from '../types.js';
 
 const router = Router();
 
-// Get all goals (top-level only, not sub-goals)
+/**
+ * @swagger
+ * /goals:
+ *   get:
+ *     summary: Get all top-level goals
+ *     tags: [Goals]
+ *     responses:
+ *       200:
+ *         description: List of goals
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Goal'
+ */
 router.get('/', async (_req, res) => {
   try {
-    const result = await db.execute(`
+    const result = await trackedExecute(`
       SELECT g.* FROM goals g
       WHERE g.is_active = 1 
         AND NOT EXISTS (
           SELECT 1 FROM goal_relations gr WHERE gr.child_goal_id = g.id
         )
       ORDER BY g.created_at DESC
-    `);
+    `, 'getAllTopLevelGoals');
     const goals = result.rows as unknown as GoalRow[];
     res.json(goals.map(goalRowToGoal));
   } catch (err) {
@@ -24,13 +39,34 @@ router.get('/', async (_req, res) => {
   }
 });
 
-// Get single goal with stats
+/**
+ * @swagger
+ * /goals/{id}:
+ *   get:
+ *     summary: Get goal by ID
+ *     tags: [Goals]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Goal found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Goal'
+ *       404:
+ *         description: Goal not found
+ */
 router.get('/:id', async (req, res) => {
   try {
-    const result = await db.execute({
+    const result = await trackedExecute({
       sql: 'SELECT * FROM goals WHERE id = ?',
       args: [req.params.id]
-    });
+    }, 'getGoalById');
     
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Goal not found' });
@@ -43,13 +79,34 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Get goal stats (velocity, projections, sub-goals, etc.)
+/**
+ * @swagger
+ * /goals/{id}/stats:
+ *   get:
+ *     summary: Get goal statistics
+ *     tags: [Goals]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Goal stats with velocity, projections, sub-goals
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/GoalStats'
+ *       404:
+ *         description: Goal not found
+ */
 router.get('/:id/stats', async (req, res) => {
   try {
-    const goalResult = await db.execute({
+    const goalResult = await trackedExecute({
       sql: 'SELECT * FROM goals WHERE id = ?',
       args: [req.params.id]
-    });
+    }, 'getGoalForStats');
     
     if (goalResult.rows.length === 0) {
       return res.status(404).json({ message: 'Goal not found' });
@@ -57,20 +114,20 @@ router.get('/:id/stats', async (req, res) => {
 
     const goal = goalResult.rows[0] as unknown as GoalRow;
 
-    const logsResult = await db.execute({
+    const logsResult = await trackedExecute({
       sql: 'SELECT * FROM goal_logs WHERE goal_id = ? ORDER BY log_date DESC LIMIT 30',
       args: [req.params.id]
-    });
+    }, 'getGoalLogsForStats');
     const logs = logsResult.rows as unknown as GoalLogRow[];
 
     // Get sub-goals via junction table
-    const subGoalsResult = await db.execute({
+    const subGoalsResult = await trackedExecute({
       sql: `SELECT g.* FROM goals g
             INNER JOIN goal_relations gr ON gr.child_goal_id = g.id
             WHERE gr.parent_goal_id = ? AND g.is_active = 1 
             ORDER BY g.created_at ASC`,
       args: [req.params.id]
-    });
+    }, 'getSubGoalsForStats');
     const subGoals = subGoalsResult.rows as unknown as GoalRow[];
 
     const stats = calculateGoalStats(goal, logs, subGoals);
@@ -83,13 +140,13 @@ router.get('/:id/stats', async (req, res) => {
 // Get sub-goals for a parent goal (via junction table)
 router.get('/:id/subgoals', async (req, res) => {
   try {
-    const result = await db.execute({
+    const result = await trackedExecute({
       sql: `SELECT g.* FROM goals g
             INNER JOIN goal_relations gr ON gr.child_goal_id = g.id
             WHERE gr.parent_goal_id = ? AND g.is_active = 1 
             ORDER BY g.created_at ASC`,
       args: [req.params.id]
-    });
+    }, 'getSubGoals');
     const subGoals = result.rows as unknown as GoalRow[];
     res.json(subGoals.map(goalRowToGoal));
   } catch (err) {
@@ -101,10 +158,10 @@ router.get('/:id/subgoals', async (req, res) => {
 router.get('/:id/logs', async (req, res) => {
   try {
     const { limit = '30' } = req.query;
-    const result = await db.execute({
+    const result = await trackedExecute({
       sql: 'SELECT * FROM goal_logs WHERE goal_id = ? ORDER BY log_date DESC LIMIT ?',
       args: [req.params.id, parseInt(limit as string)]
-    });
+    }, 'getGoalLogs');
     const logs = result.rows as unknown as GoalLogRow[];
     res.json(logs.map(goalLogRowToGoalLog));
   } catch (err) {
@@ -112,7 +169,28 @@ router.get('/:id/logs', async (req, res) => {
   }
 });
 
-// Create goal (supports parentId for sub-goals via junction table)
+/**
+ * @swagger
+ * /goals:
+ *   post:
+ *     summary: Create a new goal
+ *     tags: [Goals]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateGoalRequest'
+ *     responses:
+ *       201:
+ *         description: Goal created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Goal'
+ *       400:
+ *         description: Title is required
+ */
 router.post('/', async (req, res) => {
   try {
     const { 
@@ -132,10 +210,10 @@ router.post('/', async (req, res) => {
 
     // If creating a sub-goal, verify parent exists
     if (parentId) {
-      const parentResult = await db.execute({
+      const parentResult = await trackedExecute({
         sql: 'SELECT * FROM goals WHERE id = ?',
         args: [parentId]
-      });
+      }, 'verifyParentGoalExists');
       if (parentResult.rows.length === 0) {
         return res.status(404).json({ message: 'Parent goal not found' });
       }
@@ -144,7 +222,7 @@ router.post('/', async (req, res) => {
     const id = uuidv4();
     
     // Insert the goal
-    await db.execute({
+    await trackedExecute({
       sql: `INSERT INTO goals (id, title, goal_type, target_value, unit, total_pages, frequency_period, target_date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
@@ -157,21 +235,21 @@ router.post('/', async (req, res) => {
         goalType === 'frequency' ? (frequencyPeriod || 'weekly') : null,
         targetDate || null
       ]
-    });
+    }, 'createGoal');
 
     // If this is a sub-goal, create the relation
     if (parentId) {
-      await db.execute({
+      await trackedExecute({
         sql: `INSERT INTO goal_relations (parent_goal_id, child_goal_id, relation_type)
               VALUES (?, ?, 'subgoal')`,
         args: [parentId, id]
-      });
+      }, 'createGoalRelation');
     }
 
-    const goalResult = await db.execute({
+    const goalResult = await trackedExecute({
       sql: 'SELECT * FROM goals WHERE id = ?',
       args: [id]
-    });
+    }, 'getCreatedGoal');
     const goal = goalResult.rows[0] as unknown as GoalRow;
     res.status(201).json(goalRowToGoal(goal));
   } catch (err) {
@@ -185,10 +263,10 @@ router.patch('/:id', async (req, res) => {
     const { id } = req.params;
     const { title, targetValue, unit, totalPages, currentPage, currentValue, targetDate, isActive } = req.body;
 
-    const existingResult = await db.execute({
+    const existingResult = await trackedExecute({
       sql: 'SELECT * FROM goals WHERE id = ?',
       args: [id]
-    });
+    }, 'checkGoalExistsForUpdate');
     if (existingResult.rows.length === 0) {
       return res.status(404).json({ message: 'Goal not found' });
     }
@@ -231,16 +309,16 @@ router.patch('/:id', async (req, res) => {
 
     if (updates.length > 0) {
       values.push(id);
-      await db.execute({
+      await trackedExecute({
         sql: `UPDATE goals SET ${updates.join(', ')} WHERE id = ?`,
         args: values
-      });
+      }, 'updateGoal');
     }
 
-    const goalResult = await db.execute({
+    const goalResult = await trackedExecute({
       sql: 'SELECT * FROM goals WHERE id = ?',
       args: [id]
-    });
+    }, 'getUpdatedGoal');
     const goal = goalResult.rows[0] as unknown as GoalRow;
     res.json(goalRowToGoal(goal));
   } catch (err) {
@@ -248,16 +326,41 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// Log progress for a goal
+/**
+ * @swagger
+ * /goals/{id}/logs:
+ *   post:
+ *     summary: Log progress for a goal
+ *     tags: [Goals]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateGoalLogRequest'
+ *     responses:
+ *       201:
+ *         description: Progress logged
+ *       400:
+ *         description: Value is required
+ *       404:
+ *         description: Goal not found
+ */
 router.post('/:id/logs', async (req, res) => {
   try {
     const { id } = req.params;
     const { value, note, logDate } = req.body;
 
-    const goalResult = await db.execute({
+    const goalResult = await trackedExecute({
       sql: 'SELECT * FROM goals WHERE id = ?',
       args: [id]
-    });
+    }, 'getGoalForLogging');
     if (goalResult.rows.length === 0) {
       return res.status(404).json({ message: 'Goal not found' });
     }
@@ -270,21 +373,21 @@ router.post('/:id/logs', async (req, res) => {
     const date = logDate || new Date().toISOString().split('T')[0];
 
     // Upsert log - preserve existing note if no new note provided
-    await db.execute({
+    await trackedExecute({
       sql: `INSERT INTO goal_logs (goal_id, log_date, value, note)
             VALUES (?, ?, ?, ?)
             ON CONFLICT(goal_id, log_date) DO UPDATE SET 
               value = excluded.value,
               note = COALESCE(excluded.note, note)`,
       args: [id, date, value, note || null]
-    });
+    }, 'upsertGoalLog');
 
     // Update goal's current value based on type
     if (goal.goal_type === 'reading') {
-      await db.execute({
+      await trackedExecute({
         sql: 'UPDATE goals SET current_page = ? WHERE id = ?',
         args: [value, id]
-      });
+      }, 'updateReadingProgress');
     } else if (goal.goal_type === 'frequency') {
       const periodStart = goal.frequency_period === 'weekly' 
         ? getWeekStart() 
@@ -292,34 +395,34 @@ router.post('/:id/logs', async (req, res) => {
           ? new Date().toISOString().slice(0, 7) + '-01'
           : date;
       
-      const countResult = await db.execute({
+      const countResult = await trackedExecute({
         sql: `SELECT COUNT(*) as count FROM goal_logs 
               WHERE goal_id = ? AND log_date >= ? AND value = 1`,
         args: [id, periodStart]
-      });
+      }, 'countFrequencyLogs');
       const count = (countResult.rows[0] as unknown as { count: number }).count;
       
-      await db.execute({
+      await trackedExecute({
         sql: 'UPDATE goals SET current_value = ? WHERE id = ?',
         args: [count, id]
-      });
+      }, 'updateFrequencyProgress');
     } else {
-      await db.execute({
+      await trackedExecute({
         sql: 'UPDATE goals SET current_value = ? WHERE id = ?',
         args: [value, id]
-      });
+      }, 'updateNumericProgress');
     }
 
-    const logResult = await db.execute({
+    const logResult = await trackedExecute({
       sql: 'SELECT * FROM goal_logs WHERE goal_id = ? AND log_date = ?',
       args: [id, date]
-    });
+    }, 'getCreatedLog');
     const log = logResult.rows[0] as unknown as GoalLogRow;
 
-    const updatedGoalResult = await db.execute({
+    const updatedGoalResult = await trackedExecute({
       sql: 'SELECT * FROM goals WHERE id = ?',
       args: [id]
-    });
+    }, 'getGoalAfterLog');
     const updatedGoal = updatedGoalResult.rows[0] as unknown as GoalRow;
 
     res.status(201).json({
@@ -334,10 +437,10 @@ router.post('/:id/logs', async (req, res) => {
 // Delete goal (soft delete)
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await db.execute({
+    const result = await trackedExecute({
       sql: 'UPDATE goals SET is_active = 0 WHERE id = ?',
       args: [req.params.id]
-    });
+    }, 'softDeleteGoal');
 
     if (result.rowsAffected === 0) {
       return res.status(404).json({ message: 'Goal not found' });

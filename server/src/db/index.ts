@@ -1,4 +1,5 @@
 import { createClient, Client } from '@libsql/client';
+import { createTrackedExecute, queryLoggerMiddleware, setCurrentEndpoint, clearCurrentEndpoint } from './queryLogger';
 
 // Get database URL from environment
 // Local: file:./data/auditor.db
@@ -155,6 +156,12 @@ export const initDb = initializeDatabase;
 
 // Export client for queries
 export default db;
+
+// Create tracked execute wrapper for logging
+export const trackedExecute = createTrackedExecute(db);
+
+// Re-export logging utilities
+export { queryLoggerMiddleware, setCurrentEndpoint, clearCurrentEndpoint };
 
 // Helper to get current date in YYYY-MM-DD format
 export const getToday = (): string => {

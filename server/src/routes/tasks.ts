@@ -1,27 +1,48 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import db from '../db/index.js';
+import { trackedExecute } from '../db/index.js';
 import type { TaskRow, SubTaskRow } from '../types.js';
 import { taskRowToTask, subTaskRowToSubTask } from '../types.js';
 
 const router = Router();
 
-// Get all tasks with subtasks
+/**
+ * @swagger
+ * /tasks:
+ *   get:
+ *     summary: Get all tasks
+ *     tags: [Tasks]
+ *     parameters:
+ *       - in: header
+ *         name: X-Purpose
+ *         schema:
+ *           type: string
+ *         description: UI purpose for logging
+ *     responses:
+ *       200:
+ *         description: List of tasks with subtasks
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Task'
+ */
 router.get('/', async (_req, res) => {
   try {
-    const tasksResult = await db.execute(`
+    const tasksResult = await trackedExecute(`
       SELECT * FROM tasks WHERE parent_id IS NULL ORDER BY 
         CASE WHEN deadline IS NOT NULL THEN 0 ELSE 1 END,
         deadline ASC,
         created_at DESC
-    `);
+    `, 'getAllTasks');
     const tasks = tasksResult.rows as unknown as TaskRow[];
 
     const result = await Promise.all(tasks.map(async (task) => {
-      const subTasksResult = await db.execute({
+      const subTasksResult = await trackedExecute({
         sql: 'SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC',
         args: [task.id]
-      });
+      }, 'getSubtasksForTask');
       const subTaskRows = subTasksResult.rows as unknown as SubTaskRow[];
       const subTasks = subTaskRows.map(subTaskRowToSubTask);
       return taskRowToTask(task, subTasks);
@@ -33,23 +54,44 @@ router.get('/', async (_req, res) => {
   }
 });
 
-// Get single task
+/**
+ * @swagger
+ * /tasks/{id}:
+ *   get:
+ *     summary: Get task by ID
+ *     tags: [Tasks]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Task found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Task'
+ *       404:
+ *         description: Task not found
+ */
 router.get('/:id', async (req, res) => {
   try {
-    const taskResult = await db.execute({
+    const taskResult = await trackedExecute({
       sql: 'SELECT * FROM tasks WHERE id = ?',
       args: [req.params.id]
-    });
+    }, 'getTaskById');
     
     if (taskResult.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
     }
 
     const task = taskResult.rows[0] as unknown as TaskRow;
-    const subTasksResult = await db.execute({
+    const subTasksResult = await trackedExecute({
       sql: 'SELECT * FROM subtasks WHERE task_id = ?',
       args: [task.id]
-    });
+    }, 'getSubtasksForSingleTask');
     const subTaskRows = subTasksResult.rows as unknown as SubTaskRow[];
     const subTasks = subTaskRows.map(subTaskRowToSubTask);
     
@@ -59,7 +101,28 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create task
+/**
+ * @swagger
+ * /tasks:
+ *   post:
+ *     summary: Create a new task
+ *     tags: [Tasks]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateTaskRequest'
+ *     responses:
+ *       201:
+ *         description: Task created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Task'
+ *       400:
+ *         description: Title is required
+ */
 router.post('/', async (req, res) => {
   try {
     const { title, category = 'Personal', deadline, parentId } = req.body;
@@ -70,16 +133,16 @@ router.post('/', async (req, res) => {
 
     const id = uuidv4();
     
-    await db.execute({
+    await trackedExecute({
       sql: `INSERT INTO tasks (id, parent_id, title, category, deadline)
             VALUES (?, ?, ?, ?, ?)`,
       args: [id, parentId || null, title, category, deadline || null]
-    });
+    }, 'createTask');
 
-    const taskResult = await db.execute({
+    const taskResult = await trackedExecute({
       sql: 'SELECT * FROM tasks WHERE id = ?',
       args: [id]
-    });
+    }, 'getCreatedTask');
     const task = taskResult.rows[0] as unknown as TaskRow;
     res.status(201).json(taskRowToTask(task, []));
   } catch (err) {
@@ -87,26 +150,50 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update task
+/**
+ * @swagger
+ * /tasks/{id}:
+ *   patch:
+ *     summary: Update a task
+ *     tags: [Tasks]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateTaskRequest'
+ *     responses:
+ *       200:
+ *         description: Task updated
+ *       400:
+ *         description: Cannot complete task with incomplete subtasks
+ *       404:
+ *         description: Task not found
+ */
 router.patch('/:id', async (req, res) => {
   try {
     const { title, category, deadline, isCompleted } = req.body;
     const { id } = req.params;
 
-    const existingResult = await db.execute({
+    const existingResult = await trackedExecute({
       sql: 'SELECT * FROM tasks WHERE id = ?',
       args: [id]
-    });
+    }, 'checkTaskExistsForUpdate');
     if (existingResult.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
     }
 
     // If trying to complete a task with incomplete subtasks, reject
     if (isCompleted === true) {
-      const countResult = await db.execute({
+      const countResult = await trackedExecute({
         sql: 'SELECT COUNT(*) as count FROM subtasks WHERE task_id = ? AND completed = 0',
         args: [id]
-      });
+      }, 'countIncompleteSubtasks');
       const count = (countResult.rows[0] as unknown as { count: number }).count;
       
       if (count > 0) {
@@ -138,22 +225,22 @@ router.patch('/:id', async (req, res) => {
 
     if (updates.length > 0) {
       values.push(id);
-      await db.execute({
+      await trackedExecute({
         sql: `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`,
         args: values
-      });
+      }, 'updateTask');
     }
 
-    const taskResult = await db.execute({
+    const taskResult = await trackedExecute({
       sql: 'SELECT * FROM tasks WHERE id = ?',
       args: [id]
-    });
+    }, 'getUpdatedTask');
     const task = taskResult.rows[0] as unknown as TaskRow;
     
-    const subTasksResult = await db.execute({
+    const subTasksResult = await trackedExecute({
       sql: 'SELECT * FROM subtasks WHERE task_id = ?',
       args: [id]
-    });
+    }, 'getSubtasksAfterUpdate');
     const subTaskRows = subTasksResult.rows as unknown as SubTaskRow[];
     const subTasks = subTaskRows.map(subTaskRowToSubTask);
     
@@ -163,13 +250,30 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// Delete task
+/**
+ * @swagger
+ * /tasks/{id}:
+ *   delete:
+ *     summary: Delete a task
+ *     tags: [Tasks]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       204:
+ *         description: Task deleted
+ *       404:
+ *         description: Task not found
+ */
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await db.execute({
+    const result = await trackedExecute({
       sql: 'DELETE FROM tasks WHERE id = ?',
       args: [req.params.id]
-    });
+    }, 'deleteTask');
     
     if (result.rowsAffected === 0) {
       return res.status(404).json({ message: 'Task not found' });
@@ -187,10 +291,10 @@ router.post('/:taskId/subtasks', async (req, res) => {
     const { taskId } = req.params;
     const { text } = req.body;
 
-    const taskResult = await db.execute({
+    const taskResult = await trackedExecute({
       sql: 'SELECT * FROM tasks WHERE id = ?',
       args: [taskId]
-    });
+    }, 'getTaskForSubtask');
     if (taskResult.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
     }
@@ -201,29 +305,29 @@ router.post('/:taskId/subtasks', async (req, res) => {
     }
 
     const id = uuidv4();
-    await db.execute({
+    await trackedExecute({
       sql: 'INSERT INTO subtasks (id, task_id, text) VALUES (?, ?, ?)',
       args: [id, taskId, text]
-    });
+    }, 'createSubtask');
 
     // If task was completed, uncomplete it since we added a new subtask
     if (task.is_completed) {
-      await db.execute({
+      await trackedExecute({
         sql: 'UPDATE tasks SET is_completed = 0 WHERE id = ?',
         args: [taskId]
-      });
+      }, 'uncompleteTaskAfterSubtask');
     }
 
-    const updatedTaskResult = await db.execute({
+    const updatedTaskResult = await trackedExecute({
       sql: 'SELECT * FROM tasks WHERE id = ?',
       args: [taskId]
-    });
+    }, 'getTaskAfterSubtaskAdd');
     const updatedTask = updatedTaskResult.rows[0] as unknown as TaskRow;
     
-    const subTasksResult = await db.execute({
+    const subTasksResult = await trackedExecute({
       sql: 'SELECT * FROM subtasks WHERE task_id = ?',
       args: [taskId]
-    });
+    }, 'getSubtasksAfterAdd');
     const subTaskRows = subTasksResult.rows as unknown as SubTaskRow[];
     const subTasks = subTaskRows.map(subTaskRowToSubTask);
     
@@ -239,39 +343,39 @@ router.patch('/:taskId/subtasks/:subTaskId', async (req, res) => {
     const { taskId, subTaskId } = req.params;
     const { completed, text } = req.body;
 
-    const subtaskResult = await db.execute({
+    const subtaskResult = await trackedExecute({
       sql: 'SELECT * FROM subtasks WHERE id = ? AND task_id = ?',
       args: [subTaskId, taskId]
-    });
+    }, 'checkSubtaskExists');
     
     if (subtaskResult.rows.length === 0) {
       return res.status(404).json({ message: 'Subtask not found' });
     }
 
     if (completed !== undefined) {
-      await db.execute({
+      await trackedExecute({
         sql: 'UPDATE subtasks SET completed = ? WHERE id = ?',
         args: [completed ? 1 : 0, subTaskId]
-      });
+      }, 'updateSubtaskCompleted');
     }
 
     if (text !== undefined) {
-      await db.execute({
+      await trackedExecute({
         sql: 'UPDATE subtasks SET text = ? WHERE id = ?',
         args: [text, subTaskId]
-      });
+      }, 'updateSubtaskText');
     }
 
-    const taskResult = await db.execute({
+    const taskResult = await trackedExecute({
       sql: 'SELECT * FROM tasks WHERE id = ?',
       args: [taskId]
-    });
+    }, 'getTaskAfterSubtaskUpdate');
     const task = taskResult.rows[0] as unknown as TaskRow;
     
-    const subTasksResult = await db.execute({
+    const subTasksResult = await trackedExecute({
       sql: 'SELECT * FROM subtasks WHERE task_id = ?',
       args: [taskId]
-    });
+    }, 'getSubtasksAfterUpdate');
     const subTaskRows = subTasksResult.rows as unknown as SubTaskRow[];
     const subTasks = subTaskRows.map(subTaskRowToSubTask);
     
@@ -286,25 +390,25 @@ router.delete('/:taskId/subtasks/:subTaskId', async (req, res) => {
   try {
     const { taskId, subTaskId } = req.params;
 
-    const result = await db.execute({
+    const result = await trackedExecute({
       sql: 'DELETE FROM subtasks WHERE id = ? AND task_id = ?',
       args: [subTaskId, taskId]
-    });
+    }, 'deleteSubtask');
 
     if (result.rowsAffected === 0) {
       return res.status(404).json({ message: 'Subtask not found' });
     }
 
-    const taskResult = await db.execute({
+    const taskResult = await trackedExecute({
       sql: 'SELECT * FROM tasks WHERE id = ?',
       args: [taskId]
-    });
+    }, 'getTaskAfterSubtaskDelete');
     const task = taskResult.rows[0] as unknown as TaskRow;
     
-    const subTasksResult = await db.execute({
+    const subTasksResult = await trackedExecute({
       sql: 'SELECT * FROM subtasks WHERE task_id = ?',
       args: [taskId]
-    });
+    }, 'getSubtasksAfterDelete');
     const subTaskRows = subTasksResult.rows as unknown as SubTaskRow[];
     const subTasks = subTaskRows.map(subTaskRowToSubTask);
     
