@@ -13,6 +13,7 @@ export interface Task {
   subTasks: SubTask[];
   category: 'Work' | 'Admin' | 'Personal';
   deadline: string | null;
+  scheduledCompleteDate: string | null;
   isCompleted: boolean;
   createdAt: string;
 }
@@ -100,6 +101,7 @@ export interface UpdateTaskRequest {
   title?: string;
   category?: 'Work' | 'Admin' | 'Personal';
   deadline?: string;
+  scheduledCompleteDate?: string | null;
   isCompleted?: boolean;
 }
 

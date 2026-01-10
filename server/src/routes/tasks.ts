@@ -177,7 +177,7 @@ router.post('/', async (req, res) => {
  */
 router.patch('/:id', async (req, res) => {
   try {
-    const { title, category, deadline, isCompleted } = req.body;
+    const { title, category, deadline, scheduledCompleteDate, isCompleted } = req.body;
     const { id } = req.params;
 
     const existingResult = await trackedExecute({
@@ -217,6 +217,10 @@ router.patch('/:id', async (req, res) => {
     if (deadline !== undefined) {
       updates.push('deadline = ?');
       values.push(deadline);
+    }
+    if (scheduledCompleteDate !== undefined) {
+      updates.push('scheduled_complete_date = ?');
+      values.push(scheduledCompleteDate);
     }
     if (isCompleted !== undefined) {
       updates.push('is_completed = ?');

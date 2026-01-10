@@ -11,4 +11,5 @@ export { GoalsProgress } from './GoalsProgress';
 export { GoalCard } from './GoalCard';
 export { GoalFormModal } from './GoalFormModal';
 export { TaskEditModal } from './TaskEditModal';
+export { WeeklyCalendarView } from './WeeklyCalendarView';
 

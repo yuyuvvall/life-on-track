@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     title TEXT NOT NULL,
     category TEXT DEFAULT 'Personal' CHECK (category IN ('Work', 'Admin', 'Personal')),
     deadline DATETIME,
+    scheduled_complete_date TEXT,
     is_completed BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -149,6 +150,14 @@ async function initializeDatabase() {
   }
   
   console.log(`[Database] Schema initialized successfully`);
+  
+  // Migration: Add scheduled_complete_date column if it doesn't exist
+  try {
+    await db.execute('ALTER TABLE tasks ADD COLUMN scheduled_complete_date TEXT');
+    console.log('[Database] Added scheduled_complete_date column to tasks');
+  } catch {
+    // Column already exists, ignore error
+  }
 }
 
 // Initialize database (called from server startup)

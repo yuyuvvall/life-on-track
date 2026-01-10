@@ -5,6 +5,7 @@ export interface TaskRow {
   title: string;
   category: 'Work' | 'Admin' | 'Personal';
   deadline: string | null;
+  scheduled_complete_date: string | null;
   is_completed: number;
   created_at: string;
 }
@@ -74,6 +75,7 @@ export interface Task {
   subTasks: SubTask[];
   category: 'Work' | 'Admin' | 'Personal';
   deadline: string | null;
+  scheduledCompleteDate: string | null;
   isCompleted: boolean;
   createdAt: string;
 }
@@ -155,6 +157,7 @@ export function taskRowToTask(row: TaskRow, subTasks: SubTask[]): Task {
     subTasks,
     category: row.category,
     deadline: row.deadline,
+    scheduledCompleteDate: row.scheduled_complete_date,
     isCompleted: Boolean(row.is_completed),
     createdAt: row.created_at,
   };

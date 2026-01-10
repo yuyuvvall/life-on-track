@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     title TEXT NOT NULL,
     category TEXT DEFAULT 'Personal' CHECK (category IN ('Work', 'Admin', 'Personal')),
     deadline DATETIME,
+    scheduled_complete_date TEXT,  -- YYYY-MM-DD format for weekly scheduling
     is_completed BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
