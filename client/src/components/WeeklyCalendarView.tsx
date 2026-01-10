@@ -79,16 +79,16 @@ function DayColumn({ date, tasks, isCurrentDay, onDragStart, onDragOver, onDrop,
       onDragOver={onDragOver}
       onDrop={(e) => onDrop(e, dateKey)}
       className={`
-        flex flex-col rounded-lg transition-all min-h-[140px]
+        flex flex-col rounded-lg transition-all min-h-[120px] md:min-h-[140px]
         ${isCurrentDay 
-          ? 'bg-accent-500/20 border-2 border-accent-500' 
+          ? 'bg-accent-500/20 border-2 border-accent-500 col-span-2 md:col-span-1' 
           : 'bg-surface-800 border border-surface-700'
         }
         ${dragOver ? 'ring-2 ring-accent-400 bg-accent-500/10' : ''}
       `}
     >
       {/* Day header */}
-      <div className={`p-2 text-center border-b ${isCurrentDay ? 'border-accent-500/30' : 'border-surface-700'}`}>
+      <div className={`p-2 border-b ${isCurrentDay ? 'border-accent-500/30 flex items-center justify-center gap-3 md:block md:text-center' : 'border-surface-700 text-center'}`}>
         <span className={`text-xs font-medium uppercase tracking-wider ${
           isCurrentDay ? 'text-accent-400' : 'text-gray-500'
         }`}>
@@ -99,10 +99,13 @@ function DayColumn({ date, tasks, isCurrentDay, onDragStart, onDragOver, onDrop,
         }`}>
           {date.getDate()}
         </div>
+        {isCurrentDay && (
+          <span className="text-xs text-accent-400 md:hidden">Today</span>
+        )}
       </div>
       
       {/* Tasks container */}
-      <div className="flex-1 p-1.5 space-y-1 overflow-y-auto">
+      <div className={`flex-1 p-1.5 overflow-y-auto ${isCurrentDay ? 'grid grid-cols-2 md:grid-cols-1 gap-1' : 'space-y-1'}`}>
         {tasks.map((task) => (
           <DraggableTask key={task.id} task={task} onDragStart={onDragStart} />
         ))}
@@ -129,7 +132,7 @@ export function WeeklyCalendarView() {
 
     // Filter out completed tasks and sort
     const incompleteTasks = tasks.filter(t => !t.isCompleted);
-    
+
     incompleteTasks.forEach(task => {
       if (task.scheduledCompleteDate) {
         // Check if the scheduled date is in the current week
@@ -192,9 +195,9 @@ export function WeeklyCalendarView() {
     return (
       <div className="animate-pulse space-y-3">
         <div className="h-4 bg-surface-700 rounded w-32 mx-auto"></div>
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
           {[...Array(7)].map((_, i) => (
-            <div key={i} className="h-32 bg-surface-800 rounded-lg"></div>
+            <div key={i} className="h-28 md:h-32 bg-surface-800 rounded-lg"></div>
           ))}
         </div>
       </div>
@@ -210,8 +213,8 @@ export function WeeklyCalendarView() {
         </span>
       </div>
 
-      {/* 7-day grid */}
-      <div className="grid grid-cols-7 gap-2">
+      {/* 7-day grid - 2 cols on mobile (with today full width), 7 cols on desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
         {weekDays.map((day) => {
           const dateKey = formatDateKey(day);
           return (
