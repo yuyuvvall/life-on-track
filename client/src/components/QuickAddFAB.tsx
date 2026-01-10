@@ -12,9 +12,10 @@ export function QuickAddFAB() {
     isLongPress.current = false;
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
-      openQuickAdd('task');
+      // Long press: Navigate to expense quick add page
+      navigate('/expense/add');
     }, 500);
-  }, [openQuickAdd]);
+  }, [navigate]);
 
   const handleTouchEnd = useCallback(() => {
     if (longPressTimer.current) {
@@ -22,18 +23,19 @@ export function QuickAddFAB() {
       longPressTimer.current = null;
     }
     if (!isLongPress.current) {
-      // Navigate to expense quick add page
-      navigate('/expense/add');
+      // Quick tap: Add task
+      openQuickAdd('task');
     }
-  }, [navigate]);
+  }, [openQuickAdd]);
 
   const handleMouseDown = useCallback(() => {
     isLongPress.current = false;
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
-      openQuickAdd('task');
+      // Long press: Navigate to expense quick add page
+      navigate('/expense/add');
     }, 500);
-  }, [openQuickAdd]);
+  }, [navigate]);
 
   const handleMouseUp = useCallback(() => {
     if (longPressTimer.current) {
@@ -41,10 +43,10 @@ export function QuickAddFAB() {
       longPressTimer.current = null;
     }
     if (!isLongPress.current) {
-      // Navigate to expense quick add page
-      navigate('/expense/add');
+      // Quick tap: Add task
+      openQuickAdd('task');
     }
-  }, [navigate]);
+  }, [openQuickAdd]);
 
   const handleMouseLeave = useCallback(() => {
     if (longPressTimer.current) {
@@ -64,7 +66,7 @@ export function QuickAddFAB() {
                  flex items-center justify-center text-white
                  hover:bg-blue-600 active:scale-95 transition-all z-40
                  touch-none select-none"
-      title="Tap: Add Expense | Long press: Add Task"
+      title="Tap: Add Task | Long press: Add Expense"
     >
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
