@@ -1,23 +1,27 @@
 import { useState } from 'react';
-import { useCreateGoal } from '@/hooks';
-import type { GoalType, FrequencyPeriod } from '@/types';
+import { useCreateGoal, useUpdateGoal } from '@/hooks';
+import type { Goal, GoalType, FrequencyPeriod } from '@/types';
 
 interface GoalFormModalProps {
   onClose: () => void;
   parentId?: string;
   parentTitle?: string;
+  goal?: Goal; // If provided, we're in edit mode
 }
 
-export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalProps) {
+export function GoalFormModal({ onClose, parentId, parentTitle, goal }: GoalFormModalProps) {
   const createGoal = useCreateGoal();
+  const updateGoal = useUpdateGoal();
   
-  const [title, setTitle] = useState('');
-  const [goalType, setGoalType] = useState<GoalType>('frequency');
-  const [targetValue, setTargetValue] = useState('');
-  const [unit, setUnit] = useState('');
-  const [totalPages, setTotalPages] = useState('');
-  const [frequencyPeriod, setFrequencyPeriod] = useState<FrequencyPeriod>('weekly');
-  const [targetDate, setTargetDate] = useState('');
+  const isEditMode = !!goal;
+  
+  const [title, setTitle] = useState(goal?.title || '');
+  const [goalType, setGoalType] = useState<GoalType>(goal?.goalType || 'frequency');
+  const [targetValue, setTargetValue] = useState(goal?.targetValue?.toString() || '');
+  const [unit, setUnit] = useState(goal?.unit || '');
+  const [totalPages, setTotalPages] = useState(goal?.totalPages?.toString() || '');
+  const [frequencyPeriod, setFrequencyPeriod] = useState<FrequencyPeriod>(goal?.frequencyPeriod || 'weekly');
+  const [targetDate, setTargetDate] = useState(goal?.targetDate?.split('T')[0] || '');
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -25,24 +29,38 @@ export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalP
     if (!title.trim()) return;
     setError(null);
 
-    try {
-      await createGoal.mutateAsync({
-        title: title.trim(),
-        goalType,
-        targetValue: parseInt(targetValue) || 0,
-        unit: unit || undefined,
-        totalPages: goalType === 'reading' ? parseInt(totalPages) || undefined : undefined,
-        frequencyPeriod: goalType === 'frequency' ? frequencyPeriod : undefined,
-        targetDate: targetDate || undefined,
-        parentId: parentId || undefined,
-      });
+        try {
+      if (isEditMode && goal) {
+        await updateGoal.mutateAsync({
+          id: goal.id,
+          data: {
+            title: title.trim(),
+            targetValue: parseInt(targetValue) || 0,
+            unit: unit || undefined,
+            totalPages: goalType === 'reading' ? parseInt(totalPages) || undefined : undefined,
+            targetDate: targetDate || undefined,
+          },
+        });
+      } else {
+        await createGoal.mutateAsync({
+          title: title.trim(),
+          goalType,
+          targetValue: parseInt(targetValue) || 0,
+          unit: unit || undefined,
+          totalPages: goalType === 'reading' ? parseInt(totalPages) || undefined : undefined,
+          frequencyPeriod: goalType === 'frequency' ? frequencyPeriod : undefined,
+          targetDate: targetDate || undefined,
+          parentId: parentId || undefined,
+        });
+      }
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create goal');
+      setError(err instanceof Error ? err.message : isEditMode ? 'Failed to update goal' : 'Failed to create goal');
     }
   };
 
   const isSubGoal = !!parentId;
+  const isPending = createGoal.isPending || updateGoal.isPending;
 
   return (
     <div 
@@ -54,7 +72,7 @@ export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalP
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold text-gray-100 mb-1">
-          {isSubGoal ? 'Add Sub-Goal' : 'Create New Goal'}
+          {isEditMode ? 'Edit Goal' : isSubGoal ? 'Add Sub-Goal' : 'Create New Goal'}
         </h2>
         {isSubGoal && parentTitle && (
           <p className="text-xs text-gray-500 mb-4">Under: {parentTitle}</p>
@@ -67,9 +85,11 @@ export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalP
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Goal Type - available for all goals including sub-goals */}
+          {/* Goal Type - available for all goals including sub-goals, but not editable */}
           <div>
-            <label className="block text-xs text-gray-500 mb-2">Goal Type</label>
+            <label className="block text-xs text-gray-500 mb-2">
+              Goal Type {isEditMode && <span className="text-gray-600">(cannot be changed)</span>}
+            </label>
             <div className="grid grid-cols-3 gap-2">
               {[
                 { type: 'reading' as const, icon: '📖', label: 'Reading' },
@@ -79,11 +99,13 @@ export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalP
                 <button
                   key={type}
                   type="button"
-                  onClick={() => setGoalType(type)}
+                  onClick={() => !isEditMode && setGoalType(type)}
+                  disabled={isEditMode}
                   className={`py-3 rounded-lg text-center transition-colors
                     ${goalType === type 
                       ? 'bg-accent-blue text-white' 
-                      : 'bg-surface-600 text-gray-300 hover:bg-surface-500'}`}
+                      : 'bg-surface-600 text-gray-300 hover:bg-surface-500'}
+                    ${isEditMode ? 'cursor-not-allowed opacity-60' : ''}`}
                 >
                   <div className="text-xl mb-1">{icon}</div>
                   <div className="text-xs">{label}</div>
@@ -215,10 +237,16 @@ export function GoalFormModal({ onClose, parentId, parentTitle }: GoalFormModalP
             </button>
             <button
               type="submit"
-              disabled={!title.trim() || createGoal.isPending}
+              disabled={!title.trim() || isPending}
               className="btn btn-primary flex-1"
             >
-              {createGoal.isPending ? 'Creating...' : isSubGoal ? 'Add Sub-Goal' : 'Create Goal'}
+              {isPending 
+                ? (isEditMode ? 'Saving...' : 'Creating...') 
+                : isEditMode 
+                  ? 'Save Changes' 
+                  : isSubGoal 
+                    ? 'Add Sub-Goal' 
+                    : 'Create Goal'}
             </button>
           </div>
         </form>

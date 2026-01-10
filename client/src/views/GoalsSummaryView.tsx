@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useGoals, useDeleteGoal } from '@/hooks';
 import { GoalCard } from '@/components/GoalCard';
 import { GoalFormModal } from '@/components/GoalFormModal';
@@ -36,9 +35,6 @@ export function GoalsSummaryView() {
         <div className="px-4 py-3">
           <div className="flex items-center justify-between">
             <div>
-              <Link to="/" className="text-xs text-accent-blue hover:text-blue-400">
-                ← Pulse
-              </Link>
               <h1 className="text-lg font-semibold text-gray-100 mt-1">
                 Goals Tracker
               </h1>

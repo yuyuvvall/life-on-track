@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Goal } from '@/types';
+import { GoalFormModal } from './GoalFormModal';
 
 interface GoalCardProps {
   goal: Goal;
@@ -7,6 +9,8 @@ interface GoalCardProps {
 }
 
 export function GoalCard({ goal, onDelete }: GoalCardProps) {
+  const [isEditing, setIsEditing] = useState(false);
+
   const getProgressInfo = () => {
     if (goal.goalType === 'reading' && goal.totalPages) {
       const percent = Math.round((goal.currentPage / goal.totalPages) * 100);
@@ -40,54 +44,79 @@ export function GoalCard({ goal, onDelete }: GoalCardProps) {
   const typeIcon = goal.goalType === 'reading' ? '📖' : goal.goalType === 'frequency' ? '🔄' : '📊';
 
   return (
-    <Link 
-      to={`/goals/${goal.id}`}
-      className="block bg-surface-700 rounded-lg p-4 hover:bg-surface-600 transition-colors group"
-    >
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{typeIcon}</span>
-          <h3 className="font-medium text-gray-100 group-hover:text-white">
-            {goal.title}
-          </h3>
+    <>
+      <Link 
+        to={`/goals/${goal.id}`}
+        className="block bg-surface-700 rounded-lg p-4 hover:bg-surface-600 transition-colors group"
+      >
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{typeIcon}</span>
+            <h3 className="font-medium text-gray-100 group-hover:text-white">
+              {goal.title}
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Edit button */}
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsEditing(true);
+              }}
+              className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-accent-blue transition-opacity"
+              title="Edit goal"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </button>
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDelete(goal.id);
+                }}
+                className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-accent-red text-sm transition-opacity"
+              >
+                Archive
+              </button>
+            )}
+          </div>
         </div>
-        {onDelete && (
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onDelete(goal.id);
-            }}
-            className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-accent-red text-sm transition-opacity"
-          >
-            Archive
-          </button>
+
+        {/* Progress info */}
+        <div className="text-xs text-gray-400 font-mono mb-2">
+          {progress.label}
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-2 bg-surface-500 rounded-full overflow-hidden">
+          <div 
+            className={`h-full rounded-full transition-all ${progress.color}`}
+            style={{ width: `${progress.percent}%` }}
+          />
+        </div>
+
+        {/* Target date if set */}
+        {goal.targetDate && (
+          <div className="mt-2 text-xs text-gray-500">
+            Target: {new Date(goal.targetDate).toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric' 
+            })}
+          </div>
         )}
-      </div>
+      </Link>
 
-      {/* Progress info */}
-      <div className="text-xs text-gray-400 font-mono mb-2">
-        {progress.label}
-      </div>
-
-      {/* Progress bar */}
-      <div className="h-2 bg-surface-500 rounded-full overflow-hidden">
-        <div 
-          className={`h-full rounded-full transition-all ${progress.color}`}
-          style={{ width: `${progress.percent}%` }}
+      {/* Edit Modal */}
+      {isEditing && (
+        <GoalFormModal 
+          goal={goal}
+          onClose={() => setIsEditing(false)} 
         />
-      </div>
-
-      {/* Target date if set */}
-      {goal.targetDate && (
-        <div className="mt-2 text-xs text-gray-500">
-          Target: {new Date(goal.targetDate).toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric' 
-          })}
-        </div>
       )}
-    </Link>
+    </>
   );
 }
-

@@ -15,6 +15,7 @@ export function GoalDetailView() {
   const [logNote, setLogNote] = useState('');
   const [showLogForm, setShowLogForm] = useState(false);
   const [showAddSubGoal, setShowAddSubGoal] = useState(false);
+  const [showEditGoal, setShowEditGoal] = useState(false);
   
   // Habit-specific state
   const [habitNote, setHabitNote] = useState('');
@@ -107,12 +108,23 @@ export function GoalDetailView() {
               <span>{typeIcon}</span>
               {goal.title}
             </h1>
-            <button
-              onClick={handleDelete}
-              className="text-xs text-gray-500 hover:text-accent-red"
-            >
-              Archive
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowEditGoal(true)}
+                className="text-xs text-gray-500 hover:text-accent-blue flex items-center gap-1"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Edit
+              </button>
+              <button
+                onClick={handleDelete}
+                className="text-xs text-gray-500 hover:text-accent-red"
+              >
+                Archive
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -531,6 +543,14 @@ export function GoalDetailView() {
           onClose={() => setShowAddSubGoal(false)} 
           parentId={goal.id}
           parentTitle={goal.title}
+        />
+      )}
+
+      {/* Edit Goal Modal */}
+      {showEditGoal && (
+        <GoalFormModal 
+          goal={goal}
+          onClose={() => setShowEditGoal(false)} 
         />
       )}
     </div>

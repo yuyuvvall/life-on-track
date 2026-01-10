@@ -109,7 +109,8 @@ export interface CreateSubTaskRequest {
 }
 
 export interface UpdateSubTaskRequest {
-  completed: boolean;
+  completed?: boolean;
+  text?: string;
 }
 
 export interface CreateWorkLogRequest {

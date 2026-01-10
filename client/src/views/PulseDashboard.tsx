@@ -17,7 +17,7 @@ export function PulseDashboard() {
     const hour = new Date().getHours();
     const hasLogged = todayLog?.integrityScore !== null && todayLog?.integrityScore !== undefined;
     
-    if (!hasLogged && hour >= 18) {
+    if (!hasLogged && hour >= 20) {
       // Delay to not interrupt initial page load
       const timer = setTimeout(() => {
         openIntegrityModal();

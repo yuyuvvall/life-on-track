@@ -237,7 +237,7 @@ router.post('/:taskId/subtasks', async (req, res) => {
 router.patch('/:taskId/subtasks/:subTaskId', async (req, res) => {
   try {
     const { taskId, subTaskId } = req.params;
-    const { completed } = req.body;
+    const { completed, text } = req.body;
 
     const subtaskResult = await db.execute({
       sql: 'SELECT * FROM subtasks WHERE id = ? AND task_id = ?',
@@ -252,6 +252,13 @@ router.patch('/:taskId/subtasks/:subTaskId', async (req, res) => {
       await db.execute({
         sql: 'UPDATE subtasks SET completed = ? WHERE id = ?',
         args: [completed ? 1 : 0, subTaskId]
+      });
+    }
+
+    if (text !== undefined) {
+      await db.execute({
+        sql: 'UPDATE subtasks SET text = ? WHERE id = ?',
+        args: [text, subTaskId]
       });
     }
 

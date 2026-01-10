@@ -15,6 +15,18 @@ const CATEGORY_ICONS: Record<string, string> = {
   'Other': '📦',
 };
 
+// Category border colors (matching ExpenseQuickAdd)
+const CATEGORY_COLORS: Record<string, string> = {
+  'Food': 'border-l-orange-500',
+  'Groceries': 'border-l-blue-500',
+  'Transport': 'border-l-amber-500',
+  'Shopping': 'border-l-pink-500',
+  'Bills': 'border-l-slate-500',
+  'Entertainment': 'border-l-purple-500',
+  'Health': 'border-l-emerald-500',
+  'Other': 'border-l-gray-500',
+};
+
 export function ExpensesView() {
   const navigate = useNavigate();
   const deleteExpense = useDeleteExpense();
@@ -124,7 +136,7 @@ export function ExpensesView() {
                 {dayExpenses.map((expense) => (
                   <div
                     key={expense.id}
-                    className="bg-surface-800 rounded-xl p-3 flex items-center gap-3"
+                    className={`bg-surface-800 rounded-xl p-3 flex items-center gap-3 border-l-4 ${CATEGORY_COLORS[expense.category] || 'border-l-gray-500'}`}
                   >
                     {/* Category Icon */}
                     <div className="w-10 h-10 bg-surface-700 rounded-full flex items-center justify-center text-xl">
