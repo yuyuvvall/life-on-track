@@ -11,29 +11,27 @@ export function IntegrityLogger({ compact = false }: IntegrityLoggerProps) {
   const updateWorkLog = useUpdateWorkLog();
 
   const [showNoteInput, setShowNoteInput] = useState(false);
-  const [note, setNote] = useState('');
+  const [successNote, setSuccessNote] = useState('');
+  const [missedNote, setMissedNote] = useState('');
   const [pendingScore, setPendingScore] = useState<0 | 1 | null>(null);
 
-  // Reset note when log changes
+  // Reset notes when log changes
   useEffect(() => {
     if (todayLog) {
-      setNote(todayLog.missedOpportunityNote || todayLog.successNote || '');
+      setSuccessNote(todayLog.successNote || '');
+      setMissedNote(todayLog.missedOpportunityNote || '');
     }
   }, [todayLog]);
 
   const handleScoreSelect = (score: 0 | 1) => {
-    if (score === 0) {
-      // Force note input for failed day
-      setPendingScore(0);
-      setShowNoteInput(true);
-      setNote('');
-    } else {
-      // Submit immediately for success
-      submitScore(score, undefined);
-    }
+    // Always show note input form for both scores
+    setPendingScore(score);
+    setShowNoteInput(true);
+    setSuccessNote('');
+    setMissedNote('');
   };
 
-  const submitScore = (score: 0 | 1, missedNote?: string) => {
+  const submitScore = (score: 0 | 1, successNoteVal?: string, missedNoteVal?: string) => {
     const today = new Date().toISOString().split('T')[0];
 
     if (todayLog) {
@@ -41,16 +39,16 @@ export function IntegrityLogger({ compact = false }: IntegrityLoggerProps) {
         id: todayLog.id,
         data: {
           integrityScore: score,
-          missedOpportunityNote: score === 0 ? missedNote : undefined,
-          successNote: score === 1 ? note || undefined : undefined,
+          missedOpportunityNote: missedNoteVal || undefined,
+          successNote: successNoteVal || undefined,
         },
       });
     } else {
       createWorkLog.mutate({
         logDate: today,
         integrityScore: score,
-        missedOpportunityNote: score === 0 ? missedNote : undefined,
-        successNote: score === 1 ? note || undefined : undefined,
+        missedOpportunityNote: missedNoteVal || undefined,
+        successNote: successNoteVal || undefined,
       });
     }
 
@@ -60,14 +58,20 @@ export function IntegrityLogger({ compact = false }: IntegrityLoggerProps) {
 
   const handleNoteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pendingScore === 0 && !note.trim()) return;
-    submitScore(pendingScore ?? 0, note.trim());
+    if (pendingScore === null) return;
+    submitScore(pendingScore, successNote.trim(), missedNote.trim());
+  };
+
+  const handleSkip = () => {
+    if (pendingScore === null) return;
+    submitScore(pendingScore);
   };
 
   const handleCancel = () => {
     setShowNoteInput(false);
     setPendingScore(null);
-    setNote('');
+    setSuccessNote('');
+    setMissedNote('');
   };
 
   if (isLoading) {
@@ -78,21 +82,37 @@ export function IntegrityLogger({ compact = false }: IntegrityLoggerProps) {
 
   // Compact mode with note input support
   if (compact) {
-    // Show note input form when "0" was selected
-    if (showNoteInput && pendingScore === 0) {
+    // Show dual note input form when score was selected
+    if (showNoteInput && pendingScore !== null) {
       return (
         <div className="bg-surface-700 rounded-lg p-3">
           <form onSubmit={handleNoteSubmit} className="space-y-2">
-            <div className="text-xs text-accent-red font-medium">
-              What opportunity did you miss today?
+            <div className={`text-xs font-medium ${pendingScore === 1 ? 'text-accent-green' : 'text-accent-red'}`}>
+              {pendingScore === 1 ? '✓ Success Day' : '✗ Missed Opportunity'}
             </div>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Reflect on what went wrong..."
-              className="w-full h-16 text-sm resize-none"
-              autoFocus
-            />
+            
+            {/* Positive notes */}
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">What went well? (optional)</label>
+              <textarea
+                value={successNote}
+                onChange={(e) => setSuccessNote(e.target.value)}
+                placeholder="Wins, achievements..."
+                className="w-full h-12 text-sm resize-none"
+              />
+            </div>
+            
+            {/* Negative notes */}
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">What could improve? (optional)</label>
+              <textarea
+                value={missedNote}
+                onChange={(e) => setMissedNote(e.target.value)}
+                placeholder="Missed opportunities..."
+                className="w-full h-12 text-sm resize-none"
+              />
+            </div>
+
             <div className="flex gap-2">
               <button
                 type="button"
@@ -102,11 +122,19 @@ export function IntegrityLogger({ compact = false }: IntegrityLoggerProps) {
                 Cancel
               </button>
               <button
+                type="button"
+                onClick={handleSkip}
+                disabled={createWorkLog.isPending || updateWorkLog.isPending}
+                className="btn btn-ghost flex-1 text-xs py-1.5"
+              >
+                Skip
+              </button>
+              <button
                 type="submit"
-                disabled={!note.trim() || createWorkLog.isPending || updateWorkLog.isPending}
+                disabled={createWorkLog.isPending || updateWorkLog.isPending}
                 className="btn btn-primary flex-1 text-xs py-1.5"
               >
-                {createWorkLog.isPending || updateWorkLog.isPending ? 'Saving...' : 'Log'}
+                {createWorkLog.isPending || updateWorkLog.isPending ? '...' : 'Log'}
               </button>
             </div>
           </form>
@@ -168,24 +196,46 @@ export function IntegrityLogger({ compact = false }: IntegrityLoggerProps) {
           <div className="text-sm text-gray-400">
             {todayLog.integrityScore === 1 ? 'Productive day logged' : 'Missed opportunity logged'}
           </div>
-          {(todayLog.missedOpportunityNote || todayLog.successNote) && (
-            <div className="mt-2 text-xs text-gray-500 italic">
-              "{todayLog.missedOpportunityNote || todayLog.successNote}"
+          {/* Show both notes if they exist */}
+          {todayLog.successNote && (
+            <div className="mt-2 text-xs text-accent-green/80 italic text-left">
+              ✓ "{todayLog.successNote}"
+            </div>
+          )}
+          {todayLog.missedOpportunityNote && (
+            <div className="mt-2 text-xs text-accent-red/80 italic text-left">
+              ✗ "{todayLog.missedOpportunityNote}"
             </div>
           )}
         </div>
       ) : showNoteInput ? (
         <form onSubmit={handleNoteSubmit} className="space-y-3">
-          <div className="text-sm text-accent-red">
-            What opportunity did you miss today?
+          <div className={`text-sm font-medium ${pendingScore === 1 ? 'text-accent-green' : 'text-accent-red'}`}>
+            {pendingScore === 1 ? '✓ Logging Success Day' : '✗ Logging Missed Opportunity'}
           </div>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Reflect on what went wrong..."
-            className="w-full h-20 text-sm resize-none"
-            autoFocus
-          />
+          
+          {/* Positive notes */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">What went well? (optional)</label>
+            <textarea
+              value={successNote}
+              onChange={(e) => setSuccessNote(e.target.value)}
+              placeholder="Wins, achievements, good decisions..."
+              className="w-full h-16 text-sm resize-none"
+            />
+          </div>
+          
+          {/* Negative notes */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">What could improve? (optional)</label>
+            <textarea
+              value={missedNote}
+              onChange={(e) => setMissedNote(e.target.value)}
+              placeholder="Missed opportunities, things to work on..."
+              className="w-full h-16 text-sm resize-none"
+            />
+          </div>
+
           <div className="flex gap-2">
             <button
               type="button"
@@ -195,8 +245,16 @@ export function IntegrityLogger({ compact = false }: IntegrityLoggerProps) {
               Cancel
             </button>
             <button
+              type="button"
+              onClick={handleSkip}
+              disabled={createWorkLog.isPending || updateWorkLog.isPending}
+              className="btn btn-ghost flex-1"
+            >
+              Skip Notes
+            </button>
+            <button
               type="submit"
-              disabled={!note.trim() || createWorkLog.isPending || updateWorkLog.isPending}
+              disabled={createWorkLog.isPending || updateWorkLog.isPending}
               className="btn btn-primary flex-1"
             >
               {createWorkLog.isPending || updateWorkLog.isPending ? 'Saving...' : 'Log'}

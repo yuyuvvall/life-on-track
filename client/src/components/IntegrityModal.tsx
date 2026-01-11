@@ -8,26 +8,46 @@ export function IntegrityModal() {
   const createWorkLog = useCreateWorkLog();
 
   const [score, setScore] = useState<0 | 1 | null>(null);
-  const [note, setNote] = useState('');
+  const [successNote, setSuccessNote] = useState('');
+  const [missedNote, setMissedNote] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (score === null) return;
-    if (score === 0 && !note.trim()) return;
 
     const today = new Date().toISOString().split('T')[0];
     createWorkLog.mutate(
       {
         logDate: today,
         integrityScore: score,
-        missedOpportunityNote: score === 0 ? note.trim() : undefined,
-        successNote: score === 1 ? note.trim() || undefined : undefined,
+        missedOpportunityNote: missedNote.trim() || undefined,
+        successNote: successNote.trim() || undefined,
       },
       {
         onSuccess: () => {
           closeIntegrityModal();
           setScore(null);
-          setNote('');
+          setSuccessNote('');
+          setMissedNote('');
+        },
+      }
+    );
+  };
+
+  const handleSkip = () => {
+    if (score === null) return;
+    const today = new Date().toISOString().split('T')[0];
+    createWorkLog.mutate(
+      {
+        logDate: today,
+        integrityScore: score,
+      },
+      {
+        onSuccess: () => {
+          closeIntegrityModal();
+          setScore(null);
+          setSuccessNote('');
+          setMissedNote('');
         },
       }
     );
@@ -84,19 +104,38 @@ export function IntegrityModal() {
             <span>Missed</span>
           </div>
 
-          {/* Note input - required for 0, optional for 1 */}
+          {/* Dual note inputs - both optional */}
           {score !== null && (
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">
-                {score === 0 ? 'What opportunity did you miss? (required)' : 'Any notes? (optional)'}
-              </label>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder={score === 0 ? 'Reflect on what went wrong...' : 'Optional reflection...'}
-                className="w-full h-24 text-sm resize-none"
-                autoFocus
-              />
+            <div className="space-y-3">
+              <div className={`text-sm font-medium text-center ${score === 1 ? 'text-accent-green' : 'text-accent-red'}`}>
+                {score === 1 ? '✓ Success Day' : '✗ Missed Opportunity'}
+              </div>
+              
+              {/* Positive notes */}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  What went well? (optional)
+                </label>
+                <textarea
+                  value={successNote}
+                  onChange={(e) => setSuccessNote(e.target.value)}
+                  placeholder="Wins, achievements..."
+                  className="w-full h-16 text-sm resize-none"
+                />
+              </div>
+              
+              {/* Negative notes */}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  What could improve? (optional)
+                </label>
+                <textarea
+                  value={missedNote}
+                  onChange={(e) => setMissedNote(e.target.value)}
+                  placeholder="Missed opportunities..."
+                  className="w-full h-16 text-sm resize-none"
+                />
+              </div>
             </div>
           )}
 
@@ -108,9 +147,19 @@ export function IntegrityModal() {
             >
               Later
             </button>
+            {score !== null && (
+              <button
+                type="button"
+                onClick={handleSkip}
+                disabled={createWorkLog.isPending}
+                className="btn btn-ghost flex-1"
+              >
+                Skip
+              </button>
+            )}
             <button
               type="submit"
-              disabled={score === null || (score === 0 && !note.trim()) || createWorkLog.isPending}
+              disabled={score === null || createWorkLog.isPending}
               className="btn btn-primary flex-1"
             >
               {createWorkLog.isPending ? 'Saving...' : 'Log'}

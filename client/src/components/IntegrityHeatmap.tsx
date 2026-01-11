@@ -3,9 +3,10 @@ import type { WorkLog } from '@/types';
 interface IntegrityHeatmapProps {
   workLogs: WorkLog[];
   weekStart: string;
+  onDayClick?: (log: WorkLog | null, date: string) => void;
 }
 
-export function IntegrityHeatmap({ workLogs, weekStart }: IntegrityHeatmapProps) {
+export function IntegrityHeatmap({ workLogs, weekStart, onDayClick }: IntegrityHeatmapProps) {
   // Generate 7 days starting from weekStart
   const days = Array.from({ length: 7 }, (_, i) => {
     const date = new Date(weekStart);
@@ -13,7 +14,7 @@ export function IntegrityHeatmap({ workLogs, weekStart }: IntegrityHeatmapProps)
     return date.toISOString().split('T')[0];
   });
 
-  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   const getLogForDate = (date: string) => {
     return workLogs.find(l => l.logDate === date);
@@ -21,6 +22,12 @@ export function IntegrityHeatmap({ workLogs, weekStart }: IntegrityHeatmapProps)
 
   const successCount = workLogs.filter(l => l.integrityScore === 1).length;
   const failCount = workLogs.filter(l => l.integrityScore === 0).length;
+
+  const handleDayClick = (date: string) => {
+    if (!onDayClick) return;
+    const log = getLogForDate(date);
+    onDayClick(log || null, date);
+  };
 
   return (
     <div className="bg-surface-700 rounded-lg p-4">
@@ -37,17 +44,22 @@ export function IntegrityHeatmap({ workLogs, weekStart }: IntegrityHeatmapProps)
           const log = getLogForDate(date);
           const score = log?.integrityScore;
           const isToday = date === new Date().toISOString().split('T')[0];
+          const hasNotes = log?.successNote || log?.missedOpportunityNote;
+          const isClickable = !!onDayClick && (log !== undefined);
           
           return (
             <div key={date} className="flex-1 text-center">
               <div className="text-[10px] text-gray-500 mb-1">{dayNames[i]}</div>
               <div 
+                onClick={() => isClickable && handleDayClick(date)}
                 className={`heatmap-cell mx-auto ${
                   score === 1 ? 'heatmap-success' : 
                   score === 0 ? 'heatmap-fail' : 
                   'heatmap-empty'
-                } ${isToday ? 'ring-1 ring-accent-blue' : ''}`}
-                title={`${date}: ${score === 1 ? 'Success' : score === 0 ? 'Missed' : 'No log'}`}
+                } ${isToday ? 'ring-1 ring-accent-blue' : ''} ${
+                  isClickable ? 'cursor-pointer hover:scale-110 transition-transform' : ''
+                } ${hasNotes ? 'ring-1 ring-white/30' : ''}`}
+                title={`${date}: ${score === 1 ? 'Success' : score === 0 ? 'Missed' : 'No log'}${hasNotes ? ' (has notes)' : ''}`}
               >
                 {score === 1 ? '1' : score === 0 ? '0' : '–'}
               </div>

@@ -4,11 +4,90 @@ import { useWeeklySummary } from '@/hooks';
 import { IntegrityHeatmap } from '@/components/IntegrityHeatmap';
 import { SpendingChart } from '@/components/SpendingChart';
 import { GoalsProgress } from '@/components/GoalsProgress';
+import type { WorkLog } from '@/types';
+
+// Day Notes Modal Component
+function DayNotesModal({ 
+  log, 
+  date, 
+  onClose 
+}: { 
+  log: WorkLog | null; 
+  date: string; 
+  onClose: () => void;
+}) {
+  if (!log) return null;
+
+  const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    month: 'short', 
+    day: 'numeric' 
+  });
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-surface-800 w-full max-w-sm rounded-xl p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-100">
+            {formattedDate}
+          </h2>
+          <div className={`text-2xl ${log.integrityScore === 1 ? 'text-accent-green' : 'text-accent-red'}`}>
+            {log.integrityScore === 1 ? '✓' : '✗'}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* Success Note */}
+          <div>
+            <div className="text-xs text-accent-green font-medium mb-1 flex items-center gap-1">
+              <span>✓</span> What went well
+            </div>
+            {log.successNote ? (
+              <div className="text-sm text-gray-300 bg-accent-green/10 rounded-lg p-3 border-l-2 border-accent-green">
+                {log.successNote}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500 italic">No notes recorded</div>
+            )}
+          </div>
+
+          {/* Missed Opportunity Note */}
+          <div>
+            <div className="text-xs text-accent-red font-medium mb-1 flex items-center gap-1">
+              <span>✗</span> What could improve
+            </div>
+            {log.missedOpportunityNote ? (
+              <div className="text-sm text-gray-300 bg-accent-red/10 rounded-lg p-3 border-l-2 border-accent-red">
+                {log.missedOpportunityNote}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500 italic">No notes recorded</div>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="btn btn-ghost w-full mt-4"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function ClosingEventView() {
   const { data: summary, isLoading } = useWeeklySummary();
   const [reflection, setReflection] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<{ log: WorkLog | null; date: string } | null>(null);
 
   // Auto-populate reflection with missed opportunity notes
   const autoPopulatedContent = useMemo(() => {
@@ -82,7 +161,8 @@ export function ClosingEventView() {
           {/* Integrity Heatmap */}
           <IntegrityHeatmap 
             workLogs={summary.workLogs} 
-            weekStart={summary.weekStart} 
+            weekStart={summary.weekStart}
+            onDayClick={(log, date) => setSelectedDay({ log, date })}
           />
 
           {/* Spending */}
@@ -182,6 +262,15 @@ Use markdown for formatting..."
           </div>
         </div>
       </div>
+
+      {/* Day Notes Modal */}
+      {selectedDay && (
+        <DayNotesModal
+          log={selectedDay.log}
+          date={selectedDay.date}
+          onClose={() => setSelectedDay(null)}
+        />
+      )}
     </div>
   );
 }
