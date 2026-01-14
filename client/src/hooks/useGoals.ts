@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { goalsApi } from '@/api/client';
-import type { CreateGoalRequest, UpdateGoalRequest, CreateGoalLogRequest } from '@/types';
+import type { CreateGoalRequest, UpdateGoalRequest, CreateGoalLogRequest, UpdateGoalLogRequest } from '@/types';
 
 export function useGoals(purpose = 'Load goals list') {
   return useQuery({
@@ -67,6 +67,20 @@ export function useLogGoalProgress() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });
       queryClient.invalidateQueries({ queryKey: ['goals', id] });
+      queryClient.invalidateQueries({ queryKey: ['weeklySummary'] });
+    },
+  });
+}
+
+export function useUpdateGoalLog() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ goalId, logId, data }: { goalId: string; logId: number; data: UpdateGoalLogRequest }) =>
+      goalsApi.updateLog(goalId, logId, data, 'Update goal log'),
+    onSuccess: (_, { goalId }) => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['goals', goalId] });
       queryClient.invalidateQueries({ queryKey: ['weeklySummary'] });
     },
   });

@@ -1,8 +1,17 @@
-import { useMemo, useState, DragEvent } from 'react';
+import { useMemo, useState, useRef, useCallback, DragEvent, TouchEvent } from 'react';
 import { useTasks, useUpdateTask } from '@/hooks';
 import type { Task } from '@/types';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Touch drag state interface
+interface TouchDragState {
+  taskId: string;
+  taskTitle: string;
+  startX: number;
+  startY: number;
+  clone: HTMLDivElement | null;
+}
 
 function getWeekDays(): Date[] {
   const today = new Date();
@@ -36,9 +45,12 @@ function formatDateKey(date: Date): string {
 interface DraggableTaskProps {
   task: Task;
   onDragStart: (e: DragEvent<HTMLDivElement>, taskId: string) => void;
+  onTouchStart: (e: TouchEvent<HTMLDivElement>, task: Task) => void;
+  onTouchMove: (e: TouchEvent<HTMLDivElement>) => void;
+  onTouchEnd: (e: TouchEvent<HTMLDivElement>) => void;
 }
 
-function DraggableTask({ task, onDragStart }: DraggableTaskProps) {
+function DraggableTask({ task, onDragStart, onTouchStart, onTouchMove, onTouchEnd }: DraggableTaskProps) {
   const categoryColors = {
     Work: 'border-l-blue-500',
     Admin: 'border-l-purple-500',
@@ -49,10 +61,13 @@ function DraggableTask({ task, onDragStart }: DraggableTaskProps) {
     <div
       draggable
       onDragStart={(e) => onDragStart(e, task.id)}
+      onTouchStart={(e) => onTouchStart(e, task)}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
       className={`
         px-2 py-1.5 bg-surface-700 rounded text-xs cursor-grab active:cursor-grabbing
         border-l-2 ${categoryColors[task.category]}
-        hover:bg-surface-600 transition-colors
+        hover:bg-surface-600 transition-colors select-none touch-none
         ${task.isCompleted ? 'opacity-50 line-through' : ''}
       `}
     >
@@ -69,13 +84,17 @@ interface DayColumnProps {
   onDragOver: (e: DragEvent<HTMLDivElement>) => void;
   onDrop: (e: DragEvent<HTMLDivElement>, date: string) => void;
   dragOver: boolean;
+  onTouchStart: (e: TouchEvent<HTMLDivElement>, task: Task) => void;
+  onTouchMove: (e: TouchEvent<HTMLDivElement>) => void;
+  onTouchEnd: (e: TouchEvent<HTMLDivElement>) => void;
 }
 
-function DayColumn({ date, tasks, isCurrentDay, onDragStart, onDragOver, onDrop, dragOver }: DayColumnProps) {
+function DayColumn({ date, tasks, isCurrentDay, onDragStart, onDragOver, onDrop, dragOver, onTouchStart, onTouchMove, onTouchEnd }: DayColumnProps) {
   const dateKey = formatDateKey(date);
   
   return (
     <div
+      data-drop-date={dateKey}
       onDragOver={onDragOver}
       onDrop={(e) => onDrop(e, dateKey)}
       className={`
@@ -107,7 +126,14 @@ function DayColumn({ date, tasks, isCurrentDay, onDragStart, onDragOver, onDrop,
       {/* Tasks container */}
       <div className={`flex-1 p-1.5 overflow-y-auto ${isCurrentDay ? 'grid grid-cols-2 md:grid-cols-1 gap-1' : 'space-y-1'}`}>
         {tasks.map((task) => (
-          <DraggableTask key={task.id} task={task} onDragStart={onDragStart} />
+          <DraggableTask 
+            key={task.id} 
+            task={task} 
+            onDragStart={onDragStart}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+          />
         ))}
       </div>
     </div>
@@ -119,6 +145,10 @@ export function WeeklyCalendarView() {
   const updateTask = useUpdateTask();
   const weekDays = useMemo(() => getWeekDays(), []);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  
+  // Touch drag state
+  const touchDragRef = useRef<TouchDragState | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Group tasks by scheduled date
   const { scheduledTasks, unscheduledTasks } = useMemo(() => {
@@ -191,6 +221,91 @@ export function WeeklyCalendarView() {
     });
   };
 
+  // Touch handlers for mobile drag and drop
+  const handleTouchStart = useCallback((e: TouchEvent<HTMLDivElement>, task: Task) => {
+    const touch = e.touches[0];
+    
+    // Create a visual clone of the task element
+    const clone = document.createElement('div');
+    clone.className = 'fixed z-50 px-2 py-1.5 bg-surface-600 rounded text-xs border-l-2 border-accent-400 shadow-lg pointer-events-none opacity-90';
+    clone.style.left = `${touch.clientX - 50}px`;
+    clone.style.top = `${touch.clientY - 20}px`;
+    clone.style.width = '120px';
+    clone.innerHTML = `<span class="text-gray-200 truncate block">${task.title}</span>`;
+    document.body.appendChild(clone);
+
+    touchDragRef.current = {
+      taskId: task.id,
+      taskTitle: task.title,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      clone,
+    };
+  }, []);
+
+  const handleTouchMove = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    if (!touchDragRef.current) return;
+    
+    e.preventDefault(); // Prevent scrolling while dragging
+    
+    const touch = e.touches[0];
+    const { clone } = touchDragRef.current;
+    
+    // Move the clone
+    if (clone) {
+      clone.style.left = `${touch.clientX - 50}px`;
+      clone.style.top = `${touch.clientY - 20}px`;
+    }
+
+    // Hide clone temporarily to find element underneath
+    if (clone) clone.style.display = 'none';
+    const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (clone) clone.style.display = '';
+
+    // Find drop target
+    const dropTarget = elementBelow?.closest('[data-drop-date]') as HTMLElement | null;
+    if (dropTarget) {
+      const dateKey = dropTarget.getAttribute('data-drop-date');
+      setDragOverDate(dateKey);
+    } else {
+      setDragOverDate(null);
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    if (!touchDragRef.current) return;
+
+    const { taskId, clone } = touchDragRef.current;
+    
+    // Remove the clone
+    if (clone) {
+      clone.remove();
+    }
+
+    // Get drop target
+    const touch = e.changedTouches[0];
+    const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+    const dropTarget = elementBelow?.closest('[data-drop-date]') as HTMLElement | null;
+
+    if (dropTarget) {
+      const dateKey = dropTarget.getAttribute('data-drop-date');
+      if (dateKey === 'unscheduled') {
+        updateTask.mutate({
+          id: taskId,
+          data: { scheduledCompleteDate: null }
+        });
+      } else if (dateKey) {
+        updateTask.mutate({
+          id: taskId,
+          data: { scheduledCompleteDate: dateKey }
+        });
+      }
+    }
+
+    setDragOverDate(null);
+    touchDragRef.current = null;
+  }, [updateTask]);
+
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-3">
@@ -205,7 +320,7 @@ export function WeeklyCalendarView() {
   }
 
   return (
-    <div className="space-y-4" onDragLeave={handleDragLeave}>
+    <div ref={containerRef} className="space-y-4" onDragLeave={handleDragLeave}>
       {/* Week header with month/year */}
       <div className="text-center">
         <span className="text-sm text-gray-400">
@@ -227,6 +342,9 @@ export function WeeklyCalendarView() {
               onDragOver={(e) => handleDragOver(e, dateKey)}
               onDrop={handleDrop}
               dragOver={dragOverDate === dateKey}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
             />
           );
         })}
@@ -234,6 +352,7 @@ export function WeeklyCalendarView() {
 
       {/* Unscheduled tasks */}
       <div
+        data-drop-date="unscheduled"
         onDragOver={(e) => {
           e.preventDefault();
           setDragOverDate('unscheduled');
@@ -255,7 +374,14 @@ export function WeeklyCalendarView() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {unscheduledTasks.map((task) => (
-              <DraggableTask key={task.id} task={task} onDragStart={handleDragStart} />
+              <DraggableTask 
+                key={task.id} 
+                task={task} 
+                onDragStart={handleDragStart}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              />
             ))}
           </div>
         )}

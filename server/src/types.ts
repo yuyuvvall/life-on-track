@@ -35,6 +35,18 @@ export interface ExpenseRow {
   created_at: string;
 }
 
+export interface RecurringExpenseRow {
+  id: number;
+  amount: number;
+  category: string;
+  note: string | null;
+  recurrence_type: 'weekly' | 'monthly';
+  recurrence_day: number;
+  is_active: number;
+  last_generated_date: string | null;
+  created_at: string;
+}
+
 export interface GoalRow {
   id: string;
   parent_id: string | null;
@@ -94,6 +106,18 @@ export interface Expense {
   amount: number;
   category: string;
   note: string | null;
+  createdAt: string;
+}
+
+export interface RecurringExpense {
+  id: number;
+  amount: number;
+  category: string;
+  note: string | null;
+  recurrenceType: 'weekly' | 'monthly';
+  recurrenceDay: number;
+  isActive: boolean;
+  lastGeneratedDate: string | null;
   createdAt: string;
 }
 
@@ -188,6 +212,20 @@ export function expenseRowToExpense(row: ExpenseRow): Expense {
     amount: row.amount,
     category: row.category,
     note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
+export function recurringExpenseRowToRecurringExpense(row: RecurringExpenseRow): RecurringExpense {
+  return {
+    id: row.id,
+    amount: row.amount,
+    category: row.category,
+    note: row.note,
+    recurrenceType: row.recurrence_type,
+    recurrenceDay: row.recurrence_day,
+    isActive: Boolean(row.is_active),
+    lastGeneratedDate: row.last_generated_date,
     createdAt: row.created_at,
   };
 }

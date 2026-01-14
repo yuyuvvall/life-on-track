@@ -434,6 +434,161 @@ router.post('/:id/logs', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /goals/{goalId}/logs/{logId}:
+ *   patch:
+ *     summary: Update a goal log
+ *     tags: [Goals]
+ *     parameters:
+ *       - in: path
+ *         name: goalId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: logId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               value:
+ *                 type: number
+ *               note:
+ *                 type: string
+ *               logDate:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       200:
+ *         description: Log updated successfully
+ *       404:
+ *         description: Log not found
+ */
+router.patch('/:goalId/logs/:logId', async (req, res) => {
+  try {
+    const { goalId, logId } = req.params;
+    const { value, note, logDate } = req.body;
+
+    // Check log exists
+    const existingResult = await trackedExecute({
+      sql: 'SELECT * FROM goal_logs WHERE id = ? AND goal_id = ?',
+      args: [logId, goalId]
+    }, 'getGoalLogForUpdate');
+    
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Goal log not found' });
+    }
+    const existingLog = existingResult.rows[0] as unknown as GoalLogRow;
+
+    // Get the goal for type info
+    const goalResult = await trackedExecute({
+      sql: 'SELECT * FROM goals WHERE id = ?',
+      args: [goalId]
+    }, 'getGoalForLogUpdate');
+    if (goalResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Goal not found' });
+    }
+    const goal = goalResult.rows[0] as unknown as GoalRow;
+
+    // Build update query
+    const updates: string[] = [];
+    const values: (string | number | null)[] = [];
+
+    if (value !== undefined) {
+      updates.push('value = ?');
+      values.push(value);
+    }
+    if (note !== undefined) {
+      updates.push('note = ?');
+      values.push(note || null);
+    }
+    if (logDate !== undefined) {
+      updates.push('log_date = ?');
+      values.push(logDate);
+    }
+
+    if (updates.length > 0) {
+      values.push(parseInt(logId));
+      await trackedExecute({
+        sql: `UPDATE goal_logs SET ${updates.join(', ')} WHERE id = ?`,
+        args: values
+      }, 'updateGoalLog');
+    }
+
+    // Recalculate goal progress if value changed
+    if (value !== undefined) {
+      if (goal.goal_type === 'reading') {
+        // Get the latest log value for reading goals
+        const latestResult = await trackedExecute({
+          sql: 'SELECT value FROM goal_logs WHERE goal_id = ? ORDER BY log_date DESC, id DESC LIMIT 1',
+          args: [goalId]
+        }, 'getLatestReadingValue');
+        const latestValue = (latestResult.rows[0] as unknown as { value: number })?.value || 0;
+        await trackedExecute({
+          sql: 'UPDATE goals SET current_page = ? WHERE id = ?',
+          args: [latestValue, goalId]
+        }, 'updateReadingProgressAfterEdit');
+      } else if (goal.goal_type === 'frequency') {
+        const periodStart = goal.frequency_period === 'weekly' 
+          ? getWeekStart() 
+          : goal.frequency_period === 'monthly'
+            ? new Date().toISOString().slice(0, 7) + '-01'
+            : new Date().toISOString().split('T')[0];
+        
+        const countResult = await trackedExecute({
+          sql: `SELECT COUNT(*) as count FROM goal_logs 
+                WHERE goal_id = ? AND log_date >= ? AND value = 1`,
+          args: [goalId, periodStart]
+        }, 'countFrequencyLogsAfterEdit');
+        const count = (countResult.rows[0] as unknown as { count: number }).count;
+        
+        await trackedExecute({
+          sql: 'UPDATE goals SET current_value = ? WHERE id = ?',
+          args: [count, goalId]
+        }, 'updateFrequencyProgressAfterEdit');
+      } else {
+        // Numeric - use latest log value
+        const latestResult = await trackedExecute({
+          sql: 'SELECT value FROM goal_logs WHERE goal_id = ? ORDER BY log_date DESC, id DESC LIMIT 1',
+          args: [goalId]
+        }, 'getLatestNumericValue');
+        const latestValue = (latestResult.rows[0] as unknown as { value: number })?.value || 0;
+        await trackedExecute({
+          sql: 'UPDATE goals SET current_value = ? WHERE id = ?',
+          args: [latestValue, goalId]
+        }, 'updateNumericProgressAfterEdit');
+      }
+    }
+
+    // Return updated log and goal
+    const logResult = await trackedExecute({
+      sql: 'SELECT * FROM goal_logs WHERE id = ?',
+      args: [logId]
+    }, 'getUpdatedGoalLog');
+    const log = logResult.rows[0] as unknown as GoalLogRow;
+
+    const updatedGoalResult = await trackedExecute({
+      sql: 'SELECT * FROM goals WHERE id = ?',
+      args: [goalId]
+    }, 'getGoalAfterLogUpdate');
+    const updatedGoal = updatedGoalResult.rows[0] as unknown as GoalRow;
+
+    res.json({
+      log: goalLogRowToGoalLog(log),
+      goal: goalRowToGoal(updatedGoal),
+    });
+  } catch (err) {
+    res.status(500).json({ message: (err as Error).message });
+  }
+});
+
 // Delete goal (soft delete)
 router.delete('/:id', async (req, res) => {
   try {

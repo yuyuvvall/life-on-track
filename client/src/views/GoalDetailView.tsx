@@ -1,8 +1,147 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useGoalStats, useLogGoalProgress, useDeleteGoal } from '@/hooks';
+import { useGoalStats, useLogGoalProgress, useDeleteGoal, useUpdateGoalLog } from '@/hooks';
 import { GoalFormModal } from '@/components/GoalFormModal';
-import type { Goal } from '@/types';
+import type { Goal, GoalLog } from '@/types';
+
+// Goal Log Edit Modal Component
+function GoalLogEditModal({ 
+  log, 
+  goal, 
+  onClose 
+}: { 
+  log: GoalLog; 
+  goal: Goal; 
+  onClose: () => void;
+}) {
+  const updateGoalLog = useUpdateGoalLog();
+  const [value, setValue] = useState(log.value.toString());
+  const [note, setNote] = useState(log.note || '');
+  const [logDate, setLogDate] = useState(log.logDate);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const numValue = parseInt(value);
+    if (isNaN(numValue)) return;
+
+    updateGoalLog.mutate(
+      { 
+        goalId: goal.id, 
+        logId: log.id, 
+        data: { 
+          value: numValue, 
+          note: note || undefined, 
+          logDate 
+        } 
+      },
+      { onSuccess: onClose }
+    );
+  };
+
+  // For frequency goals, use toggle buttons instead of number input
+  const handleToggleValue = (newValue: 0 | 1) => {
+    setValue(newValue.toString());
+  };
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-surface-800 w-full max-w-sm rounded-xl p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold text-gray-100 mb-4">Edit Log</h2>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Date */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Date</label>
+            <input
+              type="date"
+              value={logDate}
+              onChange={(e) => setLogDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
+
+          {/* Value - depends on goal type */}
+          {goal.goalType === 'frequency' ? (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Status</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleToggleValue(1)}
+                  className={`flex-1 py-3 rounded-lg font-medium transition-all ${
+                    value === '1'
+                      ? 'bg-accent-green text-white'
+                      : 'bg-surface-700 text-gray-400 hover:bg-surface-600'
+                  }`}
+                >
+                  ✓ Did it
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleValue(0)}
+                  className={`flex-1 py-3 rounded-lg font-medium transition-all ${
+                    value === '0'
+                      ? 'bg-accent-red text-white'
+                      : 'bg-surface-700 text-gray-400 hover:bg-surface-600'
+                  }`}
+                >
+                  ✗ Didn't
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                {goal.goalType === 'reading' ? 'Page Number' : `Value (${goal.unit || 'units'})`}
+              </label>
+              <input
+                type="number"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                className="w-full text-lg font-mono"
+              />
+            </div>
+          )}
+
+          {/* Note */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Note (optional)</label>
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Any notes..."
+              className="w-full"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-ghost flex-1"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={updateGoalLog.isPending}
+              className="btn btn-primary flex-1"
+            >
+              {updateGoalLog.isPending ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export function GoalDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +160,7 @@ export function GoalDetailView() {
   const [habitNote, setHabitNote] = useState('');
   const [showHabitNoteFor, setShowHabitNoteFor] = useState<'did' | 'didnt' | null>(null);
   const [historyFilter, setHistoryFilter] = useState<'positive' | 'negative' | null>(null);
+  const [editingLog, setEditingLog] = useState<GoalLog | null>(null);
 
   if (isLoading || !stats) {
     return (
@@ -491,7 +631,8 @@ export function GoalDetailView() {
                   return (
                     <div 
                       key={log.id} 
-                      className={`bg-surface-700 rounded-lg p-3 flex items-center justify-between ${
+                      onClick={() => setEditingLog(log)}
+                      className={`bg-surface-700 rounded-lg p-3 flex items-center justify-between cursor-pointer hover:bg-surface-600 transition-colors ${
                         goal.goalType === 'frequency' 
                           ? `border-l-4 ${isPositive ? 'border-accent-green' : 'border-accent-red'}`
                           : ''
@@ -509,7 +650,7 @@ export function GoalDetailView() {
                           <div className="text-xs text-gray-400 mt-0.5 italic">"{log.note}"</div>
                         )}
                       </div>
-                      <div className="text-right">
+                      <div className="text-right flex items-center gap-2">
                         {goal.goalType === 'frequency' ? (
                           <div className={`text-sm font-medium ${isPositive ? 'text-accent-green' : 'text-accent-red'}`}>
                             {isPositive ? '✓ Done' : '✗ Missed'}
@@ -527,6 +668,7 @@ export function GoalDetailView() {
                             )}
                           </>
                         )}
+                        <span className="text-gray-600 text-xs">✎</span>
                       </div>
                     </div>
                   );
@@ -551,6 +693,15 @@ export function GoalDetailView() {
         <GoalFormModal 
           goal={goal}
           onClose={() => setShowEditGoal(false)} 
+        />
+      )}
+
+      {/* Edit Log Modal */}
+      {editingLog && (
+        <GoalLogEditModal
+          log={editingLog}
+          goal={goal}
+          onClose={() => setEditingLog(null)}
         />
       )}
     </div>

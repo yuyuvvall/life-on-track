@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useCreateExpense } from '@/hooks';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useCreateExpense, useUpdateExpense, useExpense, useCreateRecurringExpense } from '@/hooks';
+import type { RecurrenceType } from '@/types';
 
 // Categories with icons and colors
 const CATEGORIES = [
@@ -16,9 +17,18 @@ const CATEGORIES = [
 
 type CategoryId = typeof CATEGORIES[number]['id'];
 
+const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
 export function ExpenseQuickAdd() {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const expenseId = id ? parseInt(id, 10) : undefined;
+  const isEditMode = expenseId !== undefined;
+
   const createExpense = useCreateExpense();
+  const updateExpense = useUpdateExpense();
+  const createRecurringExpense = useCreateRecurringExpense();
+  const { data: existingExpense, isLoading: isLoadingExpense } = useExpense(expenseId);
 
   const [amount, setAmount] = useState('0');
   const [category, setCategory] = useState<CategoryId>('Food');
@@ -26,7 +36,25 @@ export function ExpenseQuickAdd() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // Recurring expense state
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>('monthly');
+  const [recurrenceDay, setRecurrenceDay] = useState(1);
+  const [showRecurringOptions, setShowRecurringOptions] = useState(false);
+
+  // Load existing expense data when editing
+  useEffect(() => {
+    if (existingExpense) {
+      setAmount(existingExpense.amount.toString());
+      setCategory(existingExpense.category as CategoryId);
+      setNote(existingExpense.note || '');
+      setSelectedDate(new Date(existingExpense.createdAt));
+    }
+  }, [existingExpense]);
+
   const selectedCat = CATEGORIES.find(c => c.id === category)!;
+
+  const isPending = createExpense.isPending || updateExpense.isPending || createRecurringExpense.isPending;
 
   // Handle keypad input
   const handleKeyPress = (key: string) => {
@@ -55,15 +83,44 @@ export function ExpenseQuickAdd() {
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) return;
 
-    createExpense.mutate(
-      { 
-        amount: parsedAmount, 
-        category, 
-        note: note || undefined,
-        createdAt: selectedDate.toISOString(),
-      },
-      { onSuccess: () => navigate(-1) }
-    );
+    if (isRecurring && !isEditMode) {
+      // Create recurring expense template
+      createRecurringExpense.mutate(
+        {
+          amount: parsedAmount,
+          category,
+          note: note || undefined,
+          recurrenceType,
+          recurrenceDay,
+        },
+        { onSuccess: () => navigate(-1) }
+      );
+    } else if (isEditMode && expenseId) {
+      // Update existing expense
+      updateExpense.mutate(
+        {
+          id: expenseId,
+          data: {
+            amount: parsedAmount,
+            category,
+            note: note || undefined,
+            createdAt: selectedDate.toISOString(),
+          },
+        },
+        { onSuccess: () => navigate(-1) }
+      );
+    } else {
+      // Create new regular expense
+      createExpense.mutate(
+        { 
+          amount: parsedAmount, 
+          category, 
+          note: note || undefined,
+          createdAt: selectedDate.toISOString(),
+        },
+        { onSuccess: () => navigate(-1) }
+      );
+    }
   };
 
   const formatDate = (date: Date) => {
@@ -75,6 +132,27 @@ export function ExpenseQuickAdd() {
     }
     return date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
   };
+
+  const getRecurrenceLabel = () => {
+    if (recurrenceType === 'weekly') {
+      return `Every ${DAYS_OF_WEEK[recurrenceDay]}`;
+    }
+    return `Every month on the ${recurrenceDay}${getOrdinalSuffix(recurrenceDay)}`;
+  };
+
+  const getOrdinalSuffix = (n: number) => {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return s[(v - 20) % 10] || s[v] || s[0];
+  };
+
+  if (isLoadingExpense && isEditMode) {
+    return (
+      <div className="min-h-screen bg-surface-900 flex items-center justify-center">
+        <div className="text-gray-400">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-surface-900 flex flex-col">
@@ -88,15 +166,32 @@ export function ExpenseQuickAdd() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <button 
-          onClick={() => setShowDatePicker(true)}
-          className="flex items-center gap-1 text-gray-200 font-medium"
-        >
-          {formatDate(selectedDate).split(',')[0]}
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+        <h1 className="text-gray-200 font-medium">
+          {isEditMode ? 'Edit Expense' : 'Add Expense'}
+        </h1>
+        {!isEditMode && !isRecurring && (
+          <button 
+            onClick={() => setShowDatePicker(true)}
+            className="flex items-center gap-1 text-gray-400 text-sm"
+          >
+            {formatDate(selectedDate).split(',')[0]}
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        )}
+        {isEditMode && (
+          <button 
+            onClick={() => setShowDatePicker(true)}
+            className="flex items-center gap-1 text-gray-400 text-sm"
+          >
+            {formatDate(selectedDate).split(',')[0]}
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        )}
+        {!isEditMode && isRecurring && <div className="w-20" />}
       </header>
 
       {/* Category Scroll */}
@@ -138,9 +233,53 @@ export function ExpenseQuickAdd() {
         </div>
       </div>
 
+      {/* Recurring Toggle (only in create mode) */}
+      {!isEditMode && (
+        <div className="bg-surface-800 px-4 py-3 border-b border-surface-700">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-xl">🔄</span>
+              <div>
+                <p className="text-gray-200 font-medium">Recurring Expense</p>
+                {isRecurring && (
+                  <p className="text-gray-500 text-sm">{getRecurrenceLabel()}</p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (!isRecurring) {
+                  setIsRecurring(true);
+                  setShowRecurringOptions(true);
+                } else {
+                  setIsRecurring(false);
+                }
+              }}
+              className={`relative w-12 h-7 rounded-full transition-colors ${
+                isRecurring ? 'bg-accent-blue' : 'bg-surface-600'
+              }`}
+            >
+              <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                isRecurring ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+          {isRecurring && (
+            <button
+              onClick={() => setShowRecurringOptions(true)}
+              className="mt-2 text-accent-blue text-sm hover:underline"
+            >
+              Change schedule
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Amount Display */}
       <div className="flex-1 bg-surface-900 flex flex-col items-center justify-center px-4">
-        <p className="text-accent-blue text-sm mb-1">Expense</p>
+        <p className="text-accent-blue text-sm mb-1">
+          {isRecurring ? 'Recurring Amount' : 'Expense'}
+        </p>
         <p className="text-5xl font-light text-gray-100">
           <span className="text-3xl text-accent-blue">₪</span> {amount}
         </p>
@@ -176,7 +315,7 @@ export function ExpenseQuickAdd() {
           <KeypadButton label="6" onClick={() => handleKeyPress('6')} />
           <KeypadButton 
             label="📅" 
-            onClick={() => setShowDatePicker(true)}
+            onClick={() => isRecurring ? setShowRecurringOptions(true) : setShowDatePicker(true)}
             className="text-accent-amber"
           />
 
@@ -187,10 +326,10 @@ export function ExpenseQuickAdd() {
           <KeypadButton label="3" onClick={() => handleKeyPress('3')} />
           <button
             onClick={handleSubmit}
-            disabled={createExpense.isPending || parseFloat(amount) <= 0}
+            disabled={isPending || parseFloat(amount) <= 0}
             className="row-span-2 bg-accent-green hover:bg-emerald-600 disabled:bg-surface-600 text-white rounded-xl flex items-center justify-center transition-colors"
           >
-            {createExpense.isPending ? (
+            {isPending ? (
               <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -212,7 +351,7 @@ export function ExpenseQuickAdd() {
 
       {/* Date Footer */}
       <div className="bg-surface-800 text-center py-2 text-gray-400 text-sm border-t border-surface-700">
-        {formatDate(selectedDate)}
+        {isRecurring ? getRecurrenceLabel() : formatDate(selectedDate)}
       </div>
 
       {/* Date Picker Modal */}
@@ -224,6 +363,20 @@ export function ExpenseQuickAdd() {
             setShowDatePicker(false);
           }}
           onCancel={() => setShowDatePicker(false)}
+        />
+      )}
+
+      {/* Recurring Options Modal */}
+      {showRecurringOptions && (
+        <RecurringOptionsModal
+          recurrenceType={recurrenceType}
+          recurrenceDay={recurrenceDay}
+          onSave={(type, day) => {
+            setRecurrenceType(type);
+            setRecurrenceDay(day);
+            setShowRecurringOptions(false);
+          }}
+          onCancel={() => setShowRecurringOptions(false)}
         />
       )}
 
@@ -262,6 +415,131 @@ function KeypadButton({
     >
       {label}
     </button>
+  );
+}
+
+// Recurring Options Modal Component
+function RecurringOptionsModal({
+  recurrenceType,
+  recurrenceDay,
+  onSave,
+  onCancel,
+}: {
+  recurrenceType: RecurrenceType;
+  recurrenceDay: number;
+  onSave: (type: RecurrenceType, day: number) => void;
+  onCancel: () => void;
+}) {
+  const [tempType, setTempType] = useState(recurrenceType);
+  const [tempDay, setTempDay] = useState(recurrenceDay);
+
+  const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+      onClick={onCancel}
+    >
+      <div 
+        className="bg-surface-800 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-surface-700"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-5 pb-3 border-b border-surface-700">
+          <p className="text-gray-500 text-sm">Recurring Schedule</p>
+          <p className="text-2xl font-light text-gray-100 mt-1">Set frequency</p>
+        </div>
+
+        {/* Type Selection */}
+        <div className="p-4">
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => {
+                setTempType('weekly');
+                setTempDay(0); // Default to Monday
+              }}
+              className={`flex-1 py-3 rounded-xl font-medium transition-colors ${
+                tempType === 'weekly'
+                  ? 'bg-accent-blue text-white'
+                  : 'bg-surface-700 text-gray-400'
+              }`}
+            >
+              Weekly
+            </button>
+            <button
+              onClick={() => {
+                setTempType('monthly');
+                setTempDay(1); // Default to 1st
+              }}
+              className={`flex-1 py-3 rounded-xl font-medium transition-colors ${
+                tempType === 'monthly'
+                  ? 'bg-accent-blue text-white'
+                  : 'bg-surface-700 text-gray-400'
+              }`}
+            >
+              Monthly
+            </button>
+          </div>
+
+          {/* Day Selection */}
+          {tempType === 'weekly' ? (
+            <div>
+              <p className="text-gray-500 text-sm mb-2">Day of week</p>
+              <div className="grid grid-cols-7 gap-1">
+                {DAYS_OF_WEEK.map((day, index) => (
+                  <button
+                    key={day}
+                    onClick={() => setTempDay(index)}
+                    className={`py-2 rounded-lg text-sm font-medium transition-colors ${
+                      tempDay === index
+                        ? 'bg-accent-blue text-white'
+                        : 'bg-surface-700 text-gray-400 hover:bg-surface-600'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="text-gray-500 text-sm mb-2">Day of month</p>
+              <div className="grid grid-cols-7 gap-1 max-h-48 overflow-y-auto">
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                  <button
+                    key={day}
+                    onClick={() => setTempDay(day)}
+                    className={`py-2 rounded-lg text-sm font-medium transition-colors ${
+                      tempDay === day
+                        ? 'bg-accent-blue text-white'
+                        : 'bg-surface-700 text-gray-400 hover:bg-surface-600'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-end gap-2 px-4 pb-4">
+          <button
+            onClick={onCancel}
+            className="px-6 py-2 text-gray-400 font-medium hover:text-gray-200 hover:bg-surface-700 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave(tempType, tempDay)}
+            className="px-6 py-2 text-accent-blue font-medium hover:bg-surface-700 rounded-lg transition-colors"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

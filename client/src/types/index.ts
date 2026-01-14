@@ -35,6 +35,20 @@ export interface Expense {
   createdAt: string;
 }
 
+export type RecurrenceType = 'weekly' | 'monthly';
+
+export interface RecurringExpense {
+  id: number;
+  amount: number;
+  category: string;
+  note: string | null;
+  recurrenceType: RecurrenceType;
+  recurrenceDay: number;
+  isActive: boolean;
+  lastGeneratedDate: string | null;
+  createdAt: string;
+}
+
 export type GoalType = 'reading' | 'frequency' | 'numeric';
 export type FrequencyPeriod = 'daily' | 'weekly' | 'monthly';
 
@@ -129,6 +143,30 @@ export interface CreateExpenseRequest {
   createdAt?: string;
 }
 
+export interface UpdateExpenseRequest {
+  amount?: number;
+  category?: string;
+  note?: string;
+  createdAt?: string;
+}
+
+export interface CreateRecurringExpenseRequest {
+  amount: number;
+  category: string;
+  note?: string;
+  recurrenceType: RecurrenceType;
+  recurrenceDay: number;
+}
+
+export interface UpdateRecurringExpenseRequest {
+  amount?: number;
+  category?: string;
+  note?: string;
+  recurrenceType?: RecurrenceType;
+  recurrenceDay?: number;
+  isActive?: boolean;
+}
+
 export interface CreateGoalRequest {
   title: string;
   goalType: GoalType;
@@ -153,6 +191,12 @@ export interface UpdateGoalRequest {
 
 export interface CreateGoalLogRequest {
   value: number;
+  note?: string;
+  logDate?: string;
+}
+
+export interface UpdateGoalLogRequest {
+  value?: number;
   note?: string;
   logDate?: string;
 }

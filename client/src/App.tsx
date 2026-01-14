@@ -10,7 +10,7 @@ import { QuickAddModal } from '@/components/QuickAddModal';
 import { IntegrityModal } from '@/components/IntegrityModal';
 
 // Pages where TabBar should NOT be shown
-const HIDDEN_TAB_ROUTES = ['/expense/add', '/goals/'];
+const HIDDEN_TAB_ROUTES = ['/expense/add', '/expense/edit/', '/goals/'];
 
 function AppContent() {
   const location = useLocation();
@@ -36,6 +36,7 @@ function AppContent() {
         <Route path="/goals/:id" element={<GoalDetailView />} />
         <Route path="/expenses" element={<ExpensesView />} />
         <Route path="/expense/add" element={<ExpenseQuickAdd />} />
+        <Route path="/expense/edit/:id" element={<ExpenseQuickAdd />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       

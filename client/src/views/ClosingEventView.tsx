@@ -1,21 +1,157 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { useWeeklySummary } from '@/hooks';
+import { useWeeklySummary, useUpdateWorkLog } from '@/hooks';
 import { IntegrityHeatmap } from '@/components/IntegrityHeatmap';
 import { SpendingChart } from '@/components/SpendingChart';
 import { GoalsProgress } from '@/components/GoalsProgress';
 import type { WorkLog } from '@/types';
 
-// Day Notes Modal Component
+// Shared Notes Content Component (view mode)
+function DayNotesContent({ log }: { log: WorkLog }) {
+  return (
+    <div className="space-y-4">
+      {/* Success Note */}
+      <div>
+        <div className="text-xs text-accent-green font-medium mb-1 flex items-center gap-1">
+          <span>✓</span> What went well
+        </div>
+        {log.successNote ? (
+          <div className="text-sm text-gray-300 bg-accent-green/10 rounded-lg p-3 border-l-2 border-accent-green">
+            {log.successNote}
+          </div>
+        ) : (
+          <div className="text-sm text-gray-500 italic">No notes recorded</div>
+        )}
+      </div>
+
+      {/* Missed Opportunity Note */}
+      <div>
+        <div className="text-xs text-accent-red font-medium mb-1 flex items-center gap-1">
+          <span>✗</span> What could improve
+        </div>
+        {log.missedOpportunityNote ? (
+          <div className="text-sm text-gray-300 bg-accent-red/10 rounded-lg p-3 border-l-2 border-accent-red">
+            {log.missedOpportunityNote}
+          </div>
+        ) : (
+          <div className="text-sm text-gray-500 italic">No notes recorded</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Edit form for integrity log
+function IntegrityEditForm({ 
+  log, 
+  onSave, 
+  onCancel,
+  isPending 
+}: { 
+  log: WorkLog; 
+  onSave: (data: { integrityScore?: 0 | 1; successNote?: string; missedOpportunityNote?: string }) => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  const [score, setScore] = useState<0 | 1>(log.integrityScore ?? 1);
+  const [successNote, setSuccessNote] = useState(log.successNote || '');
+  const [missedNote, setMissedNote] = useState(log.missedOpportunityNote || '');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave({
+      integrityScore: score,
+      successNote: successNote || undefined,
+      missedOpportunityNote: missedNote || undefined,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Score Toggle */}
+      <div>
+        <label className="block text-xs text-gray-500 mb-2">Integrity Score</label>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setScore(1)}
+            className={`flex-1 py-3 rounded-lg font-medium transition-all ${
+              score === 1
+                ? 'bg-accent-green text-white'
+                : 'bg-surface-700 text-gray-400 hover:bg-surface-600'
+            }`}
+          >
+            ✓ Success
+          </button>
+          <button
+            type="button"
+            onClick={() => setScore(0)}
+            className={`flex-1 py-3 rounded-lg font-medium transition-all ${
+              score === 0
+                ? 'bg-accent-red text-white'
+                : 'bg-surface-700 text-gray-400 hover:bg-surface-600'
+            }`}
+          >
+            ✗ Missed
+          </button>
+        </div>
+      </div>
+
+      {/* Success Note */}
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">What went well? (optional)</label>
+        <textarea
+          value={successNote}
+          onChange={(e) => setSuccessNote(e.target.value)}
+          placeholder="Wins, achievements..."
+          className="w-full h-16 text-sm resize-none"
+        />
+      </div>
+
+      {/* Missed Note */}
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">What could improve? (optional)</label>
+        <textarea
+          value={missedNote}
+          onChange={(e) => setMissedNote(e.target.value)}
+          placeholder="Missed opportunities..."
+          className="w-full h-16 text-sm resize-none"
+        />
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="btn btn-ghost flex-1"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={isPending}
+          className="btn btn-primary flex-1"
+        >
+          {isPending ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// Day Notes Modal Component (for mobile)
 function DayNotesModal({ 
   log, 
   date, 
-  onClose 
+  onClose
 }: { 
   log: WorkLog | null; 
   date: string; 
   onClose: () => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const updateWorkLog = useUpdateWorkLog();
+
   if (!log) return null;
 
   const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { 
@@ -23,6 +159,18 @@ function DayNotesModal({
     month: 'short', 
     day: 'numeric' 
   });
+
+  const handleSave = (data: { integrityScore?: 0 | 1; successNote?: string; missedOpportunityNote?: string }) => {
+    updateWorkLog.mutate(
+      { id: log.id, data },
+      { 
+        onSuccess: () => {
+          setIsEditing(false);
+          onClose();
+        }
+      }
+    );
+  };
 
   return (
     <div 
@@ -37,48 +185,120 @@ function DayNotesModal({
           <h2 className="text-lg font-semibold text-gray-100">
             {formattedDate}
           </h2>
-          <div className={`text-2xl ${log.integrityScore === 1 ? 'text-accent-green' : 'text-accent-red'}`}>
-            {log.integrityScore === 1 ? '✓' : '✗'}
-          </div>
+          {!isEditing && (
+            <div className="flex items-center gap-2">
+              <div className={`text-2xl ${log.integrityScore === 1 ? 'text-accent-green' : 'text-accent-red'}`}>
+                {log.integrityScore === 1 ? '✓' : '✗'}
+              </div>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="text-gray-500 hover:text-gray-300 p-1"
+                title="Edit"
+              >
+                ✎
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="space-y-4">
-          {/* Success Note */}
-          <div>
-            <div className="text-xs text-accent-green font-medium mb-1 flex items-center gap-1">
-              <span>✓</span> What went well
-            </div>
-            {log.successNote ? (
-              <div className="text-sm text-gray-300 bg-accent-green/10 rounded-lg p-3 border-l-2 border-accent-green">
-                {log.successNote}
-              </div>
-            ) : (
-              <div className="text-sm text-gray-500 italic">No notes recorded</div>
-            )}
-          </div>
-
-          {/* Missed Opportunity Note */}
-          <div>
-            <div className="text-xs text-accent-red font-medium mb-1 flex items-center gap-1">
-              <span>✗</span> What could improve
-            </div>
-            {log.missedOpportunityNote ? (
-              <div className="text-sm text-gray-300 bg-accent-red/10 rounded-lg p-3 border-l-2 border-accent-red">
-                {log.missedOpportunityNote}
-              </div>
-            ) : (
-              <div className="text-sm text-gray-500 italic">No notes recorded</div>
-            )}
-          </div>
-        </div>
-
-        <button
-          onClick={onClose}
-          className="btn btn-ghost w-full mt-4"
-        >
-          Close
-        </button>
+        {isEditing ? (
+          <IntegrityEditForm
+            log={log}
+            onSave={handleSave}
+            onCancel={() => setIsEditing(false)}
+            isPending={updateWorkLog.isPending}
+          />
+        ) : (
+          <>
+            <DayNotesContent log={log} />
+            <button
+              onClick={onClose}
+              className="btn btn-ghost w-full mt-4"
+            >
+              Close
+            </button>
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+// Day Notes Inline Component (for desktop)
+function DayNotesInline({ 
+  log, 
+  date, 
+  onClose 
+}: { 
+  log: WorkLog | null; 
+  date: string; 
+  onClose: () => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const updateWorkLog = useUpdateWorkLog();
+
+  if (!log) return null;
+
+  const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    month: 'short', 
+    day: 'numeric' 
+  });
+
+  const handleSave = (data: { integrityScore?: 0 | 1; successNote?: string; missedOpportunityNote?: string }) => {
+    updateWorkLog.mutate(
+      { id: log.id, data },
+      { 
+        onSuccess: () => {
+          setIsEditing(false);
+        }
+      }
+    );
+  };
+
+  return (
+    <div className="bg-surface-700 rounded-lg p-4 animate-in slide-in-from-top-2 duration-200">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          {!isEditing && (
+            <div className={`text-xl ${log.integrityScore === 1 ? 'text-accent-green' : 'text-accent-red'}`}>
+              {log.integrityScore === 1 ? '✓' : '✗'}
+            </div>
+          )}
+          <h3 className="text-sm font-medium text-gray-100">
+            {formattedDate}
+          </h3>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isEditing && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="text-gray-500 hover:text-gray-300 text-sm"
+              title="Edit"
+            >
+              ✎ Edit
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-300 text-lg"
+            title="Close"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      {isEditing ? (
+        <IntegrityEditForm
+          log={log}
+          onSave={handleSave}
+          onCancel={() => setIsEditing(false)}
+          isPending={updateWorkLog.isPending}
+        />
+      ) : (
+        <DayNotesContent log={log} />
+      )}
     </div>
   );
 }
@@ -88,6 +308,15 @@ export function ClosingEventView() {
   const [reflection, setReflection] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [selectedDay, setSelectedDay] = useState<{ log: WorkLog | null; date: string } | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile vs desktop based on screen width (matches Tailwind lg: breakpoint)
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Auto-populate reflection with missed opportunity notes
   const autoPopulatedContent = useMemo(() => {
@@ -162,8 +391,24 @@ export function ClosingEventView() {
           <IntegrityHeatmap 
             workLogs={summary.workLogs} 
             weekStart={summary.weekStart}
-            onDayClick={(log, date) => setSelectedDay({ log, date })}
+            onDayClick={(log, date) => {
+              // Toggle: close if clicking the same day, otherwise select new day
+              if (selectedDay?.date === date) {
+                setSelectedDay(null);
+              } else {
+                setSelectedDay({ log, date });
+              }
+            }}
           />
+
+          {/* Inline Day Notes (desktop only) */}
+          {!isMobile && selectedDay && (
+            <DayNotesInline
+              log={selectedDay.log}
+              date={selectedDay.date}
+              onClose={() => setSelectedDay(null)}
+            />
+          )}
 
           {/* Spending */}
           <SpendingChart 
@@ -263,8 +508,8 @@ Use markdown for formatting..."
         </div>
       </div>
 
-      {/* Day Notes Modal */}
-      {selectedDay && (
+      {/* Day Notes Modal (mobile only) */}
+      {isMobile && selectedDay && (
         <DayNotesModal
           log={selectedDay.log}
           date={selectedDay.date}

@@ -102,6 +102,19 @@ CREATE TABLE IF NOT EXISTS expenses (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 5a. Recurring Expenses
+CREATE TABLE IF NOT EXISTS recurring_expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount REAL NOT NULL,
+    category TEXT NOT NULL,
+    note TEXT,
+    recurrence_type TEXT NOT NULL CHECK (recurrence_type IN ('weekly', 'monthly')),
+    recurrence_day INTEGER NOT NULL,
+    is_active BOOLEAN DEFAULT 1,
+    last_generated_date DATE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 6. Weekly Reflections
 CREATE TABLE IF NOT EXISTS weekly_reflections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,6 +130,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id);
 CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id);
 CREATE INDEX IF NOT EXISTS idx_work_logs_date ON work_logs(log_date);
 CREATE INDEX IF NOT EXISTS idx_expenses_created ON expenses(created_at);
+CREATE INDEX IF NOT EXISTS idx_recurring_expenses_active ON recurring_expenses(is_active);
 `;
 
 // Initialize schema on startup

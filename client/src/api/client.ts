@@ -2,6 +2,7 @@ import type {
   Task,
   WorkLog,
   Expense,
+  RecurringExpense,
   Goal,
   GoalLog,
   GoalStats,
@@ -12,9 +13,13 @@ import type {
   UpdateSubTaskRequest,
   CreateWorkLogRequest,
   CreateExpenseRequest,
+  UpdateExpenseRequest,
+  CreateRecurringExpenseRequest,
+  UpdateRecurringExpenseRequest,
   CreateGoalRequest,
   UpdateGoalRequest,
   CreateGoalLogRequest,
+  UpdateGoalLogRequest,
 } from '@/types';
 
 // Use environment variable for production, proxy for development
@@ -137,6 +142,9 @@ export const expensesApi = {
   getAll: (purpose?: string) => 
     request<Expense[]>('/expenses', { purpose }),
   
+  getById: (id: number, purpose?: string) =>
+    request<Expense>(`/expenses/${id}`, { purpose }),
+  
   getByDateRange: (start: string, end: string, purpose?: string) =>
     request<Expense[]>(`/expenses?start=${start}&end=${end}`, { purpose }),
   
@@ -147,8 +155,44 @@ export const expensesApi = {
       purpose,
     }),
   
+  update: (id: number, data: UpdateExpenseRequest, purpose?: string) =>
+    request<Expense>(`/expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+  
   delete: (id: number, purpose?: string) =>
     request<void>(`/expenses/${id}`, { method: 'DELETE', purpose }),
+};
+
+// Recurring Expenses API
+export const recurringExpensesApi = {
+  getAll: (purpose?: string) => 
+    request<RecurringExpense[]>('/recurring-expenses', { purpose }),
+  
+  create: (data: CreateRecurringExpenseRequest, purpose?: string) =>
+    request<RecurringExpense>('/recurring-expenses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+  
+  update: (id: number, data: UpdateRecurringExpenseRequest, purpose?: string) =>
+    request<RecurringExpense>(`/recurring-expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+  
+  delete: (id: number, purpose?: string) =>
+    request<void>(`/recurring-expenses/${id}`, { method: 'DELETE', purpose }),
+  
+  generate: (purpose?: string) =>
+    request<{ generated: Expense[]; count: number }>('/recurring-expenses/generate', {
+      method: 'POST',
+      purpose,
+    }),
 };
 
 // Goals API
@@ -182,6 +226,13 @@ export const goalsApi = {
   logProgress: (id: string, data: CreateGoalLogRequest, purpose?: string) =>
     request<{ log: GoalLog; goal: Goal }>(`/goals/${id}/logs`, {
       method: 'POST',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+  
+  updateLog: (goalId: string, logId: number, data: UpdateGoalLogRequest, purpose?: string) =>
+    request<{ log: GoalLog; goal: Goal }>(`/goals/${goalId}/logs/${logId}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
       purpose,
     }),
