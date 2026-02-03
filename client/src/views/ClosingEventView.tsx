@@ -5,6 +5,7 @@ import { IntegrityHeatmap } from '@/components/IntegrityHeatmap';
 import { SpendingChart } from '@/components/SpendingChart';
 import { GoalsProgress } from '@/components/GoalsProgress';
 import type { WorkLog } from '@/types';
+import { weeklyApi } from '@/api/client';
 
 // Shared Notes Content Component (view mode)
 function DayNotesContent({ log }: { log: WorkLog }) {
@@ -502,7 +503,7 @@ Use markdown for formatting..."
 
           {/* Save indicator */}
           <div className="flex items-center justify-between text-xs text-gray-500">
-            <span>Supports Markdown</span>
+            <button className="btn btn-ghost border border-gray-500 text-gray-500 hover:text-gray-300 hover:border-gray-300" onClick={() => weeklyApi.submitReflection(reflection, 'Submit reflection')}>Submit Reflection</button>
             <span>{reflection.length} characters</span>
           </div>
         </div>

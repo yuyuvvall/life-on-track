@@ -7,10 +7,10 @@ const router = Router();
 
 /**
  * @swagger
- * /weekly:
+ * /weekly-summary:
  *   get:
  *     summary: Get weekly summary
- *     tags: [Weekly]
+ *     tags: [Weekly Summary]
  *     parameters:
  *       - in: query
  *         name: weekStart
@@ -87,6 +87,19 @@ router.get('/', async (req, res) => {
     };
 
     res.json(summary);
+  } catch (err) {
+    res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+router.post('/reflection', async (req, res) => {
+  try {
+    const reflection = req.body.reflection;
+    await trackedExecute({
+      sql: `INSERT INTO weekly_reflections (week_start, reflection_text) VALUES (?, ?)`,
+      args: [getWeekStart(), reflection]
+    }, 'submitWeeklyReflection');
+    res.json({ message: 'Reflection submitted successfully' });
   } catch (err) {
     res.status(500).json({ message: (err as Error).message });
   }

@@ -247,4 +247,11 @@ export const weeklyApi = {
     const params = weekStart ? `?weekStart=${weekStart}` : '';
     return request<WeeklySummary>(`/weekly-summary${params}`, { purpose });
   },
+  submitReflection: (reflection: string, purpose = 'Submit reflection') => {
+    return request<void>('/weekly-summary/reflection', {
+      method: 'POST',
+      body: JSON.stringify({ reflection }),
+      purpose
+    });
+  },
 };
