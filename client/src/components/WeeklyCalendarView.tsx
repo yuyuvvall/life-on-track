@@ -1,8 +1,7 @@
 import { useMemo, useState, useRef, useCallback, DragEvent, TouchEvent } from 'react';
 import { useTasks, useUpdateTask } from '@/hooks';
 import type { Task } from '@/types';
-
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+import { WEEK_DAY_NAMES } from '@/utils/dateConstants';
 
 // Touch drag state interface
 interface TouchDragState {
@@ -111,7 +110,7 @@ function DayColumn({ date, tasks, isCurrentDay, onDragStart, onDragOver, onDrop,
         <span className={`text-xs font-medium uppercase tracking-wider ${
           isCurrentDay ? 'text-accent-400' : 'text-gray-500'
         }`}>
-          {DAY_NAMES[date.getDay()]}
+          {WEEK_DAY_NAMES[date.getDay()]}
         </span>
         <div className={`text-lg font-semibold ${
           isCurrentDay ? 'text-accent-300' : 'text-gray-300'

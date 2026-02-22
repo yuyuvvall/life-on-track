@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCreateExpense, useUpdateExpense, useExpense, useCreateRecurringExpense } from '@/hooks';
+import { WEEK_DAY_NAMES } from '@/utils/dateConstants';
 import type { RecurrenceType } from '@/types';
 
 // Categories with icons and colors
@@ -16,8 +17,6 @@ const CATEGORIES = [
 ] as const;
 
 type CategoryId = typeof CATEGORIES[number]['id'];
-
-const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export function ExpenseQuickAdd() {
   const navigate = useNavigate();
@@ -135,7 +134,7 @@ export function ExpenseQuickAdd() {
 
   const getRecurrenceLabel = () => {
     if (recurrenceType === 'weekly') {
-      return `Every ${DAYS_OF_WEEK[recurrenceDay]}`;
+      return `Every ${WEEK_DAY_NAMES[recurrenceDay]}`;
     }
     return `Every month on the ${recurrenceDay}${getOrdinalSuffix(recurrenceDay)}`;
   };
@@ -433,8 +432,6 @@ function RecurringOptionsModal({
   const [tempType, setTempType] = useState(recurrenceType);
   const [tempDay, setTempDay] = useState(recurrenceDay);
 
-  const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
   return (
     <div 
       className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
@@ -456,7 +453,7 @@ function RecurringOptionsModal({
             <button
               onClick={() => {
                 setTempType('weekly');
-                setTempDay(0); // Default to Monday
+                setTempDay(0); // Default to Sunday (index 0 in Sun-Sat convention)
               }}
               className={`flex-1 py-3 rounded-xl font-medium transition-colors ${
                 tempType === 'weekly'
@@ -486,7 +483,7 @@ function RecurringOptionsModal({
             <div>
               <p className="text-gray-500 text-sm mb-2">Day of week</p>
               <div className="grid grid-cols-7 gap-1">
-                {DAYS_OF_WEEK.map((day, index) => (
+                {WEEK_DAY_NAMES.map((day, index) => (
                   <button
                     key={day}
                     onClick={() => setTempDay(index)}
@@ -556,7 +553,7 @@ function DatePickerModal({
   const [viewDate, setViewDate] = useState(new Date(selectedDate));
   const [tempDate, setTempDate] = useState(new Date(selectedDate));
 
-  const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const DAYS = WEEK_DAY_NAMES.map(d => d[0]); // ['S','M','T','W','T','F','S'] Sun-Sat
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 
                   'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -568,9 +565,8 @@ function DatePickerModal({
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     
-    // Adjust for Monday start (0 = Sunday, so we convert)
-    let startDay = firstDay.getDay() - 1;
-    if (startDay < 0) startDay = 6;
+    // Sunday-first: getDay() returns 0=Sun, 1=Mon, ..., 6=Sat
+    const startDay = firstDay.getDay();
     
     const days: (number | null)[] = [];
     

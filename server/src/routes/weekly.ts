@@ -92,6 +92,43 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /weekly-summary/reflection:
+ *   post:
+ *     summary: Submit weekly reflection
+ *     tags: [Weekly Summary]
+ *     description: Stores a reflection for the current week. The week is determined server-side (Monday as week start).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - reflection
+ *             properties:
+ *               reflection:
+ *                 type: string
+ *                 description: The weekly reflection text
+ *     responses:
+ *       200:
+ *         description: Reflection submitted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Reflection submitted successfully
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.post('/reflection', async (req, res) => {
   try {
     const reflection = req.body.reflection;

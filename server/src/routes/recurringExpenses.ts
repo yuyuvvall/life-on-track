@@ -87,7 +87,7 @@ router.post('/', async (req, res) => {
 
     // Validate recurrence day based on type
     if (recurrenceType === 'weekly' && (recurrenceDay < 0 || recurrenceDay > 6)) {
-      return res.status(400).json({ message: 'Weekly recurrence day must be 0-6 (Mon-Sun)' });
+      return res.status(400).json({ message: 'Weekly recurrence day must be 0-6 (Sun-Sat)' });
     }
 
     if (recurrenceType === 'monthly' && (recurrenceDay < 1 || recurrenceDay > 31)) {
@@ -268,7 +268,7 @@ router.post('/generate', async (_req, res) => {
   try {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
-    const dayOfWeek = (today.getDay() + 6) % 7; // Convert to Mon=0, Sun=6
+    const dayOfWeek = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
     const dayOfMonth = today.getDate();
 
     // Get all active recurring expenses

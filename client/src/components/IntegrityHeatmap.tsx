@@ -1,4 +1,5 @@
 import type { WorkLog } from '@/types';
+import { WEEK_DAY_NAMES } from '@/utils/dateConstants';
 
 interface IntegrityHeatmapProps {
   workLogs: WorkLog[];
@@ -13,8 +14,6 @@ export function IntegrityHeatmap({ workLogs, weekStart, onDayClick }: IntegrityH
     date.setDate(date.getDate() + i);
     return date.toISOString().split('T')[0];
   });
-
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   const getLogForDate = (date: string) => {
     return workLogs.find(l => l.logDate === date);
@@ -49,7 +48,7 @@ export function IntegrityHeatmap({ workLogs, weekStart, onDayClick }: IntegrityH
           
           return (
             <div key={date} className="flex-1 text-center">
-              <div className="text-[10px] text-gray-500 mb-1">{dayNames[i]}</div>
+              <div className="text-[10px] text-gray-500 mb-1">{WEEK_DAY_NAMES[i]}</div>
               <div 
                 onClick={() => isClickable && handleDayClick(date)}
                 className={`heatmap-cell mx-auto ${
