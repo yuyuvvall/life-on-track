@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getWeekStart, getWeekEnd, trackedExecute } from '../db/index.js';
 import type { WorkLogRow, ExpenseRow, GoalRow, WeeklySummary } from '../types.js';
 import { workLogRowToWorkLog, expenseRowToExpense, goalRowToGoal } from '../types.js';
+import { recalculateFrequencyGoalsCurrentValue } from './goals.js';
 
 const router = Router();
 
@@ -73,6 +74,7 @@ router.get('/', async (req, res) => {
     // Get goals with progress
     const goalsResult = await trackedExecute('SELECT * FROM goals WHERE is_active = 1', 'getActiveGoalsForSummary');
     const goals = goalsResult.rows as unknown as GoalRow[];
+    await recalculateFrequencyGoalsCurrentValue(goals);
 
     const summary: WeeklySummary = {
       weekStart,

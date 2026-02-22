@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import db, { getWeekStart, trackedExecute } from '../db/index.js';
+import db, { getPeriodStart, trackedExecute } from '../db/index.js';
 import type { GoalRow, GoalLogRow, GoalStats } from '../types.js';
 import { goalRowToGoal, goalLogRowToGoalLog } from '../types.js';
 
@@ -33,6 +33,7 @@ router.get('/', async (_req, res) => {
       ORDER BY g.created_at DESC
     `, 'getAllTopLevelGoals');
     const goals = result.rows as unknown as GoalRow[];
+    await recalculateFrequencyGoalsCurrentValue(goals);
     res.json(goals.map(goalRowToGoal));
   } catch (err) {
     res.status(500).json({ message: (err as Error).message });
@@ -129,6 +130,7 @@ router.get('/:id/stats', async (req, res) => {
       args: [req.params.id]
     }, 'getSubGoalsForStats');
     const subGoals = subGoalsResult.rows as unknown as GoalRow[];
+    await recalculateFrequencyGoalsCurrentValue(subGoals);
 
     const stats = calculateGoalStats(goal, logs, subGoals);
     res.json(stats);
@@ -389,11 +391,7 @@ router.post('/:id/logs', async (req, res) => {
         args: [value, id]
       }, 'updateReadingProgress');
     } else if (goal.goal_type === 'frequency') {
-      const periodStart = goal.frequency_period === 'weekly' 
-        ? getWeekStart() 
-        : goal.frequency_period === 'monthly'
-          ? new Date().toISOString().slice(0, 7) + '-01'
-          : date;
+      const periodStart = getPeriodStart(goal.frequency_period);
       
       const countResult = await trackedExecute({
         sql: `SELECT COUNT(*) as count FROM goal_logs 
@@ -536,11 +534,7 @@ router.patch('/:goalId/logs/:logId', async (req, res) => {
           args: [latestValue, goalId]
         }, 'updateReadingProgressAfterEdit');
       } else if (goal.goal_type === 'frequency') {
-        const periodStart = goal.frequency_period === 'weekly' 
-          ? getWeekStart() 
-          : goal.frequency_period === 'monthly'
-            ? new Date().toISOString().slice(0, 7) + '-01'
-            : new Date().toISOString().split('T')[0];
+        const periodStart = getPeriodStart(goal.frequency_period);
         
         const countResult = await trackedExecute({
           sql: `SELECT COUNT(*) as count FROM goal_logs 
@@ -607,6 +601,40 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+/**
+ * For each frequency goal in the list, fetches logs and overwrites
+ * current_value with the recalculated period count. Mutates goal objects.
+ */
+export async function recalculateFrequencyGoalsCurrentValue(
+  goals: GoalRow[]
+): Promise<void> {
+  const frequencyGoals = goals.filter((g) => g.goal_type === 'frequency');
+  if (frequencyGoals.length === 0) return;
+
+  const ids = frequencyGoals.map((g) => g.id);
+  const placeholders = ids.map(() => '?').join(',');
+  const logsResult = await trackedExecute({
+    sql: `SELECT goal_id, log_date, value FROM goal_logs 
+          WHERE goal_id IN (${placeholders}) AND value = 1`,
+    args: ids,
+  }, 'getLogsForFrequencyGoals');
+  const rows = logsResult.rows as unknown as { goal_id: string; log_date: string; value: number }[];
+
+  const byGoal = new Map<string, { log_date: string; value: number }[]>();
+  for (const r of rows) {
+    const arr = byGoal.get(r.goal_id) ?? [];
+    arr.push({ log_date: r.log_date, value: r.value });
+    byGoal.set(r.goal_id, arr);
+  }
+
+  const now = new Date();
+  for (const goal of frequencyGoals) {
+    const goalLogs = byGoal.get(goal.id) ?? [];
+    const periodStart = getPeriodStart(goal.frequency_period, now);
+    goal.current_value = goalLogs.filter((l) => l.log_date >= periodStart).length;
+  }
+}
+
 // Helper: Calculate goal statistics
 function calculateGoalStats(goal: GoalRow, logs: GoalLogRow[], subGoalRows: GoalRow[]): GoalStats {
   const goalData = goalRowToGoal(goal);
@@ -654,12 +682,7 @@ function calculateGoalStats(goal: GoalRow, logs: GoalLogRow[], subGoalRows: Goal
       }
     }
   } else if (goal.goal_type === 'frequency') {
-    const periodStart = goal.frequency_period === 'weekly' 
-      ? getWeekStart() 
-      : goal.frequency_period === 'monthly'
-        ? new Date().toISOString().slice(0, 7) + '-01'
-        : new Date().toISOString().split('T')[0];
-    
+    const periodStart = getPeriodStart(goal.frequency_period);
     const periodLogs = logs.filter(l => l.log_date >= periodStart && l.value === 1);
     periodProgress = {
       current: periodLogs.length,

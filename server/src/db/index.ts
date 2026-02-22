@@ -206,3 +206,18 @@ export const getWeekEnd = (weekStart: string): string => {
   d.setDate(d.getDate() + 6);
   return d.toISOString().split('T')[0];
 };
+
+/**
+ * Returns the period start date for a frequency goal.
+ * Used for counting logs within the current week/month/day.
+ */
+export const getPeriodStart = (
+  frequencyPeriod: 'daily' | 'weekly' | 'monthly' | null,
+  referenceDate?: Date
+): string => {
+  const d = referenceDate || new Date();
+  const today = d.toISOString().split('T')[0];
+  if (frequencyPeriod === 'weekly') return getWeekStart(d);
+  if (frequencyPeriod === 'monthly') return d.toISOString().slice(0, 7) + '-01';
+  return today;
+};
