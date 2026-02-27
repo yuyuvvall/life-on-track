@@ -32,3 +32,6 @@ server/logs/
 # PWA
 dev-dist/
 
+
+*storybook.log
+storybook-static

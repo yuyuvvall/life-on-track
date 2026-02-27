@@ -1,5 +1,5 @@
 export { PulseDashboard } from './PulseDashboard';
-export { ClosingEventView } from './ClosingEventView';
+export { ClosingEventView } from './closing-event';
 export { GoalsSummaryView } from './GoalsSummaryView';
 export { GoalDetailView } from './GoalDetailView';
 

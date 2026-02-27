@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { PulseDashboard } from '@/views/PulseDashboard';
-import { ClosingEventView } from '@/views/ClosingEventView';
+import { ClosingEventView } from '@/views/closing-event';
 import { GoalsSummaryView } from '@/views/GoalsSummaryView';
 import { GoalDetailView } from '@/views/GoalDetailView';
 import { ExpenseQuickAdd } from '@/views/ExpenseQuickAdd';
