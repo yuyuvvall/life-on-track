@@ -2,6 +2,7 @@ import type { WorkLog } from '@/types'
 import { WEEK_DAY_NAMES } from '@/utils/dateConstants'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCheck, faXmark } from '@fortawesome/free-solid-svg-icons'
+import './integrity-heatmap.less'
 
 export type IntegrityHeatmapProps = {
   workLogs: WorkLog[]
@@ -30,16 +31,22 @@ const IntegrityHeatmap = ({ workLogs, weekStart, onDayClick }: IntegrityHeatmapP
   }
 
   return (
-    <div className="bg-surface-700 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-gray-300">Integrity Heatmap</h3>
-        <div className="flex gap-2 text-xs">
-          <span className="text-accent-green">{successCount}<FontAwesomeIcon icon={faCheck} className="ml-0.5" /></span>
-          <span className="text-accent-red">{failCount}<FontAwesomeIcon icon={faXmark} className="ml-0.5" /></span>
+    <div className="integrity-heatmap">
+      <div className="integrity-heatmap__header">
+        <h3 className="integrity-heatmap__title">Integrity Heatmap</h3>
+        <div className="integrity-heatmap__stats">
+          <span className="integrity-heatmap__stat--success">
+            {successCount}
+            <FontAwesomeIcon icon={faCheck} className="integrity-heatmap__stat-icon" />
+          </span>
+          <span className="integrity-heatmap__stat--fail">
+            {failCount}
+            <FontAwesomeIcon icon={faXmark} className="integrity-heatmap__stat-icon" />
+          </span>
         </div>
       </div>
 
-      <div className="flex justify-between gap-1">
+      <div className="integrity-heatmap__grid">
         {days.map((date, i) => {
           const log = getLogForDate(date)
           const score = log?.integrityScore
@@ -47,18 +54,21 @@ const IntegrityHeatmap = ({ workLogs, weekStart, onDayClick }: IntegrityHeatmapP
           const hasNotes = log?.successNote || log?.missedOpportunityNote
           const isClickable = !!onDayClick && (log !== undefined)
 
+          const cellClasses = [
+            'heatmap-cell',
+            'integrity-heatmap__cell',
+            score === 1 ? 'heatmap-success' : score === 0 ? 'heatmap-fail' : 'heatmap-empty',
+            isToday ? 'integrity-heatmap__cell--today' : '',
+            hasNotes ? 'integrity-heatmap__cell--has-notes' : '',
+            isClickable ? 'integrity-heatmap__cell--clickable' : '',
+          ].filter(Boolean).join(' ')
+
           return (
-            <div key={date} className="flex-1 text-center">
-              <div className="text-[10px] text-gray-500 mb-1">{WEEK_DAY_NAMES[i]}</div>
+            <div key={date} className="integrity-heatmap__day">
+              <div className="integrity-heatmap__day-label">{WEEK_DAY_NAMES[i]}</div>
               <div
                 onClick={() => isClickable && handleDayClick(date)}
-                className={`heatmap-cell mx-auto ${
-                  score === 1 ? 'heatmap-success' :
-                  score === 0 ? 'heatmap-fail' :
-                  'heatmap-empty'
-                } ${isToday ? 'ring-1 ring-accent-blue' : ''} ${
-                  isClickable ? 'cursor-pointer hover:scale-110 transition-transform' : ''
-                } ${hasNotes ? 'ring-1 ring-white/30' : ''}`}
+                className={cellClasses}
                 title={`${date}: ${score === 1 ? 'Success' : score === 0 ? 'Missed' : 'No log'}${hasNotes ? ' (has notes)' : ''}`}
               >
                 {score === 1 ? '1' : score === 0 ? '0' : '–'}

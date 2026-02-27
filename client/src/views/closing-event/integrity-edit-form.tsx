@@ -1,3 +1,4 @@
+import './integrity-edit-form.less'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCheck, faXmark } from '@fortawesome/free-solid-svg-icons'
 
@@ -30,68 +31,52 @@ const IntegrityEditForm = ({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="integrity-edit-form">
       <div>
-        <label className="block text-xs text-gray-500 mb-2">Integrity Score</label>
-        <div className="flex gap-2">
+        <label className="integrity-edit-form__label integrity-edit-form__label--spaced">Integrity Score</label>
+        <div className="integrity-edit-form__score-buttons">
           <button
             type="button"
             onClick={() => onScoreChange(1)}
-            className={`flex-1 py-3 rounded-lg font-medium transition-all ${
-              score === 1
-                ? 'bg-accent-green text-white'
-                : 'bg-surface-700 text-gray-400 hover:bg-surface-600'
-            }`}
+            className={`integrity-edit-form__score-btn ${score === 1 ? 'integrity-edit-form__score-btn--success' : ''}`}
           >
-            <FontAwesomeIcon icon={faCheck} className="mr-1" /> Success
+            <FontAwesomeIcon icon={faCheck} className="integrity-edit-form__btn-icon" /> Success
           </button>
           <button
             type="button"
             onClick={() => onScoreChange(0)}
-            className={`flex-1 py-3 rounded-lg font-medium transition-all ${
-              score === 0
-                ? 'bg-accent-red text-white'
-                : 'bg-surface-700 text-gray-400 hover:bg-surface-600'
-            }`}
+            className={`integrity-edit-form__score-btn ${score === 0 ? 'integrity-edit-form__score-btn--failure' : ''}`}
           >
-            <FontAwesomeIcon icon={faXmark} className="mr-1" /> Missed
+            <FontAwesomeIcon icon={faXmark} className="integrity-edit-form__btn-icon" /> Missed
           </button>
         </div>
       </div>
 
       <div>
-        <label className="block text-xs text-gray-500 mb-1">What went well? (optional)</label>
+        <label className="integrity-edit-form__label">What went well? (optional)</label>
         <textarea
           value={successNote}
           onChange={(e) => onSuccessNoteChange(e.target.value)}
           placeholder="Wins, achievements..."
-          className="w-full h-16 text-sm resize-none"
+          className="integrity-edit-form__textarea"
         />
       </div>
 
       <div>
-        <label className="block text-xs text-gray-500 mb-1">What could improve? (optional)</label>
+        <label className="integrity-edit-form__label">What could improve? (optional)</label>
         <textarea
           value={missedNote}
           onChange={(e) => onMissedNoteChange(e.target.value)}
           placeholder="Missed opportunities..."
-          className="w-full h-16 text-sm resize-none"
+          className="integrity-edit-form__textarea"
         />
       </div>
 
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="btn btn-ghost flex-1"
-        >
+      <div className="integrity-edit-form__actions">
+        <button type="button" onClick={onCancel} className="btn btn-ghost integrity-edit-form__action-btn">
           Cancel
         </button>
-        <button
-          type="submit"
-          disabled={isPending}
-          className="btn btn-primary flex-1"
-        >
+        <button type="submit" disabled={isPending} className="btn btn-primary integrity-edit-form__action-btn">
           {isPending ? 'Saving...' : 'Save'}
         </button>
       </div>

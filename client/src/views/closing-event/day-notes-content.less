@@ -1,0 +1,51 @@
+@import '../../styles/variables.less';
+
+.day-notes-content {
+  & > * + * {
+    margin-top: @space-4;
+  }
+
+  &__label {
+    font-size: 0.75em;
+    font-weight: 500;
+    margin-bottom: @space-1;
+    display: flex;
+    align-items: center;
+    gap: @space-1;
+
+    &--success {
+      color: @accent-green;
+    }
+
+    &--failure {
+      color: @accent-red;
+    }
+  }
+
+  &__label-icon {
+    font-size: 0.714em;
+  }
+
+  &__note {
+    font-size: 0.875em;
+    color: @gray-300;
+    border-radius: @radius-lg;
+    padding: @space-3;
+
+    &--success {
+      background-color: fade(@accent-green, 10%);
+      border-left: 2px solid @accent-green;
+    }
+
+    &--failure {
+      background-color: fade(@accent-red, 10%);
+      border-left: 2px solid @accent-red;
+    }
+  }
+
+  &__empty {
+    font-size: 0.875em;
+    color: @gray-500;
+    font-style: italic;
+  }
+}

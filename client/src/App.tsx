@@ -1,13 +1,13 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { PulseDashboard } from '@/views/PulseDashboard';
+import { PulseDashboard } from '@/views/pulse-dashboard';
 import { ClosingEventView } from '@/views/closing-event';
-import { GoalsSummaryView } from '@/views/GoalsSummaryView';
-import { GoalDetailView } from '@/views/GoalDetailView';
-import { ExpenseQuickAdd } from '@/views/ExpenseQuickAdd';
-import { ExpensesView } from '@/views/ExpensesView';
-import { TabBar } from '@/components/TabBar';
-import { QuickAddModal } from '@/components/QuickAddModal';
-import { IntegrityModal } from '@/components/IntegrityModal';
+import { GoalsSummaryView } from '@/views/goals-summary-view';
+import { GoalDetailView } from '@/views/goal-detail-view';
+import { ExpenseQuickAdd } from '@/views/expense-quick-add';
+import { ExpensesView } from '@/views/expenses-view';
+import { TabBar } from '@/components/tab-bar';
+import { QuickAddModal } from '@/components/quick-add-modal';
+import { IntegrityModal } from '@/components/integrity-modal';
 
 // Pages where TabBar should NOT be shown
 const HIDDEN_TAB_ROUTES = ['/expense/add', '/expense/edit/', '/goals/'];
@@ -25,7 +25,7 @@ function AppContent() {
   });
 
   return (
-    <div className="min-h-screen bg-surface-900">
+    <div className="app-root">
       {/* Tab Navigation */}
       {showTabBar && <TabBar />}
       

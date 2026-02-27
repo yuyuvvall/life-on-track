@@ -1,0 +1,60 @@
+@import '../../styles/variables.less';
+
+.focus-list {
+  & > * + * {
+    margin-top: @space-2;
+  }
+
+  &__skeleton {
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    height: 4em;
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  &__empty {
+    text-align: center;
+    padding: @space-12 0;
+  }
+
+  &__empty-title {
+    color: @gray-500;
+    font-size: 0.875em;
+  }
+
+  &__empty-hint {
+    color: @gray-600;
+    font-size: 0.75em;
+    margin-top: @space-1;
+  }
+
+  &__completed {
+    margin-top: @space-6;
+  }
+
+  &__completed-header {
+    font-size: 0.75em;
+    color: @gray-600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: @space-2;
+    padding: 0 @space-1;
+  }
+
+  &__completed-list {
+    opacity: 0.6;
+
+    & > * + * {
+      margin-top: @space-2;
+    }
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

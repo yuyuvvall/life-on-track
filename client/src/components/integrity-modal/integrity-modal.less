@@ -1,0 +1,137 @@
+@import '../../styles/variables.less';
+
+.integrity-modal {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: @space-4;
+
+  &__card {
+    background-color: @surface-800;
+    width: 100%;
+    max-width: 24em;
+    border-radius: @radius-xl;
+    padding: @space-5;
+  }
+
+  &__title {
+    font-size: 1.125em;
+    font-weight: 600;
+    color: @gray-100;
+    text-align: center;
+    margin: 0 0 @space-1 0;
+  }
+
+  &__subtitle {
+    font-size: 0.75em;
+    color: @gray-500;
+    text-align: center;
+    margin: 0 0 @space-6 0;
+  }
+
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: @space-4;
+  }
+
+  &__score-buttons {
+    display: flex;
+    gap: @space-3;
+  }
+
+  &__score-btn {
+    flex: 1;
+    padding: @space-4 0;
+    border-radius: @radius-xl;
+    font-family: @font-mono;
+    font-size: 1.5em;
+    font-weight: 700;
+    transition: @transition-all;
+    cursor: pointer;
+    border: none;
+    background-color: fade(@accent-green, 20%);
+    color: @accent-green;
+
+    &:hover {
+      background-color: fade(@accent-green, 30%);
+    }
+
+    &--fail {
+      background-color: fade(@accent-red, 20%);
+      color: @accent-red;
+
+      &:hover {
+        background-color: fade(@accent-red, 30%);
+      }
+    }
+
+    &--active-success {
+      background-color: @accent-green;
+      color: white;
+      box-shadow: 0 0 0 0.125em @surface-800, 0 0 0 0.25em @accent-green;
+    }
+
+    &--active-fail {
+      background-color: @accent-red;
+      color: white;
+      box-shadow: 0 0 0 0.125em @surface-800, 0 0 0 0.25em @accent-red;
+    }
+  }
+
+  &__score-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75em;
+    color: @gray-500;
+    padding: 0 @space-2;
+  }
+
+  &__detail {
+    display: flex;
+    flex-direction: column;
+    gap: @space-3;
+  }
+
+  &__detail-status {
+    font-size: 0.875em;
+    font-weight: 500;
+    text-align: center;
+
+    &--success {
+      color: @accent-green;
+    }
+
+    &--fail {
+      color: @accent-red;
+    }
+  }
+
+  &__note-label {
+    display: block;
+    font-size: 0.75em;
+    color: @gray-500;
+    margin-bottom: @space-1;
+  }
+
+  &__textarea {
+    width: 100%;
+    height: 4em;
+    font-size: 0.875em;
+    resize: none;
+    box-sizing: border-box;
+  }
+
+  &__actions {
+    display: flex;
+    gap: @space-2;
+  }
+
+  &__action-btn {
+    flex: 1;
+  }
+}

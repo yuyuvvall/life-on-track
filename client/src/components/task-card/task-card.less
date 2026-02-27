@@ -1,0 +1,307 @@
+@import '../../styles/variables.less';
+
+.task-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: @radius-lg;
+
+  &--urgent {
+    // reserved for urgent-task ring / glow styling
+  }
+
+  &__swipe-bg {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    background: fade(@accent-green, 20%);
+    display: flex;
+    align-items: center;
+    padding-left: @space-4;
+  }
+
+  &__swipe-icon {
+    width: 1.5em;
+    height: 1.5em;
+    color: @accent-green;
+  }
+
+  &__content {
+    position: relative;
+    background: @surface-700;
+    padding: @space-3;
+    transition: @transition-transform;
+  }
+
+  &__row {
+    display: flex;
+    align-items: flex-start;
+    gap: @space-3;
+  }
+
+  &__checkbox {
+    margin-top: @space-0_5;
+    width: 1.25em;
+    height: 1.25em;
+    border-radius: @radius;
+    border: 2px solid @gray-500;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: @transition-colors;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+
+    &:hover {
+      border-color: @accent-green;
+    }
+
+    &--checked {
+      background: @accent-green;
+      border-color: @accent-green;
+    }
+
+    &--disabled {
+      border-color: @surface-500;
+      cursor: not-allowed;
+
+      &:hover {
+        border-color: @surface-500;
+      }
+    }
+  }
+
+  &__checkbox-icon {
+    width: 0.75em;
+    height: 0.75em;
+    color: @surface-900;
+  }
+
+  &__body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+    flex-wrap: wrap;
+  }
+
+  &__title {
+    font-size: 0.875em;
+    color: @gray-100;
+
+    &--completed {
+      color: @gray-500;
+      text-decoration: line-through;
+    }
+  }
+
+  &__counter {
+    font-size: 0.75em;
+    color: @gray-500;
+    font-family: @font-mono;
+  }
+
+  &__deadline {
+    font-size: 0.75em;
+    margin-top: @space-1;
+    font-family: @font-mono;
+    color: @gray-500;
+
+    &--urgent {
+      color: @accent-amber;
+    }
+  }
+
+  &__subtask-toggle {
+    font-size: 0.75em;
+    color: @gray-500;
+    margin-top: @space-1;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+
+    &:hover {
+      color: @gray-300;
+    }
+  }
+
+  &__subtasks {
+    margin-top: @space-2;
+    padding-left: @space-2;
+    border-left: 1px solid @surface-500;
+
+    > * + * {
+      margin-top: @space-1;
+    }
+  }
+
+  &__subtask {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+
+    &:hover {
+      .task-card__subtask-edit-btn,
+      .task-card__subtask-delete {
+        opacity: 1;
+      }
+    }
+  }
+
+  &__subtask-checkbox {
+    width: 1em;
+    height: 1em;
+    border-radius: @radius;
+    border: 1px solid @gray-600;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+
+    &:hover {
+      border-color: @gray-400;
+    }
+
+    &--checked {
+      background: fade(@accent-green, 50%);
+      border-color: fade(@accent-green, 50%);
+    }
+  }
+
+  &__subtask-check-icon {
+    width: 0.625em;
+    height: 0.625em;
+    color: #fff;
+  }
+
+  &__subtask-input {
+    flex: 1;
+    background: @surface-800;
+    border: 1px solid @surface-600;
+    color: inherit;
+    font-size: 0.75em;
+    padding: @space-0_5 @space-2;
+  }
+
+  &__subtask-text {
+    font-size: 0.75em;
+    flex: 1;
+    color: @gray-300;
+
+    &--completed {
+      color: @gray-500;
+      text-decoration: line-through;
+    }
+  }
+
+  &__subtask-edit-btn {
+    opacity: 0;
+    color: @gray-600;
+    font-size: 0.75em;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: @transition-colors;
+
+    &:hover {
+      color: @accent-blue;
+    }
+  }
+
+  &__subtask-edit-icon {
+    width: 0.75em;
+    height: 0.75em;
+  }
+
+  &__subtask-delete {
+    opacity: 0;
+    color: @gray-600;
+    font-size: 0.75em;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: @transition-colors;
+
+    &:hover {
+      color: @accent-red;
+    }
+  }
+
+  &__subtask-form {
+    display: flex;
+    gap: @space-2;
+    margin-top: @space-2;
+  }
+
+  &__subtask-form-input {
+    flex: 1;
+    background: @surface-800;
+    border: 1px solid @surface-600;
+    color: inherit;
+    font-size: 0.75em;
+    padding: @space-1 @space-2;
+  }
+
+  &__subtask-form-submit {
+    font-size: 0.75em;
+    color: @accent-blue;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+
+    &:hover {
+      color: @blue-400;
+    }
+  }
+
+  &__edit-btn {
+    color: @gray-600;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: @transition-colors;
+
+    &:hover {
+      color: @accent-blue;
+    }
+  }
+
+  &__edit-icon {
+    width: 1em;
+    height: 1em;
+  }
+
+  &__delete-btn {
+    color: @gray-600;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: @transition-colors;
+
+    &:hover {
+      color: @accent-red;
+    }
+  }
+
+  &__delete-icon {
+    width: 1em;
+    height: 1em;
+  }
+}

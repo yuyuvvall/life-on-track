@@ -1,0 +1,77 @@
+@import '../../styles/variables.less';
+
+.integrity-heatmap {
+  background-color: @surface-700;
+  border-radius: @radius-lg;
+  padding: @space-4;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: @space-3;
+  }
+
+  &__title {
+    font-size: 0.875em;
+    font-weight: 500;
+    color: @gray-300;
+  }
+
+  &__stats {
+    display: flex;
+    gap: @space-2;
+    font-size: 0.75em;
+  }
+
+  &__stat--success {
+    color: @accent-green;
+  }
+
+  &__stat--fail {
+    color: @accent-red;
+  }
+
+  &__stat-icon {
+    margin-left: @space-0_5;
+  }
+
+  &__grid {
+    display: flex;
+    justify-content: space-between;
+    gap: @space-1;
+  }
+
+  &__day {
+    flex: 1;
+    text-align: center;
+  }
+
+  &__day-label {
+    font-size: 0.714em;
+    color: @gray-500;
+    margin-bottom: @space-1;
+  }
+
+  &__cell {
+    margin-left: auto;
+    margin-right: auto;
+
+    &--today {
+      box-shadow: 0 0 0 1px @accent-blue;
+    }
+
+    &--has-notes {
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+    }
+
+    &--clickable {
+      cursor: pointer;
+      transition: @transition-transform;
+
+      &:hover {
+        transform: scale(1.1);
+      }
+    }
+  }
+}

@@ -1,0 +1,58 @@
+@import '../../styles/variables.less';
+
+.goals-progress {
+  background-color: @surface-700;
+  border-radius: @radius-lg;
+  padding: @space-4;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: @space-3;
+  }
+
+  &__title {
+    font-size: 0.875em;
+    font-weight: 500;
+    color: @gray-300;
+    margin: 0;
+  }
+
+  &__link {
+    font-size: 0.75em;
+    color: @accent-blue;
+    text-decoration: none;
+
+    &:hover {
+      color: @blue-400;
+    }
+  }
+
+  &__empty {
+    text-align: center;
+    padding-top: @space-4;
+    padding-bottom: @space-4;
+    color: @gray-500;
+    font-size: 0.875em;
+  }
+
+  &__list {
+    & > * + * {
+      margin-top: @space-3;
+    }
+  }
+
+  &__more-link {
+    display: block;
+    text-align: center;
+    font-size: 0.75em;
+    color: @gray-500;
+    text-decoration: none;
+    margin-top: @space-3;
+
+    &:hover {
+      color: @gray-300;
+    }
+  }
+}

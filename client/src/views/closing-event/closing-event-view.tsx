@@ -18,6 +18,7 @@ import IntegrityEditForm from './integrity-edit-form'
 import DayNotesModal from './day-notes-modal'
 import DayNotesInline from './day-notes-inline'
 import type { WorkLog, Goal } from '@/types'
+import './closing-event-view.less'
 
 type IntegrityEditData = {
   score: 0 | 1
@@ -166,47 +167,53 @@ const ClosingEventView = () => {
     return <DayNotesContent log={selectedDay.log} />
   }
 
+  const submitBtnClass = submitSuccess
+    ? 'closing-event-view__submit-btn closing-event-view__submit-btn--success'
+    : submitReflection.isError
+      ? 'closing-event-view__submit-btn closing-event-view__submit-btn--error'
+      : 'closing-event-view__submit-btn'
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-surface-900 flex items-center justify-center">
-        <div className="text-gray-500">Loading weekly data...</div>
+      <div className="closing-event-view__loading">
+        <div>Loading weekly data...</div>
       </div>
     )
   }
 
   if (!summary) {
     return (
-      <div className="min-h-screen bg-surface-900 flex items-center justify-center">
-        <div className="text-gray-500">No data available</div>
+      <div className="closing-event-view__empty">
+        <div>No data available</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-surface-900">
-      <header className="sticky top-0 z-30 bg-surface-900/95 backdrop-blur-sm border-b border-surface-700">
-        <div className="px-4 py-3 flex items-center justify-between">
+    <div className="closing-event-view">
+      <header className="closing-event-view__header">
+        <div className="closing-event-view__header-inner">
           <div>
-            <h1 className="text-lg font-semibold text-gray-100 mt-1">
+            <h1 className="closing-event-view__title">
               Weekly Closing Event
             </h1>
-            <p className="text-xs text-gray-500 font-mono">
+            <p className="closing-event-view__date-range">
               {summary.weekStart} → {summary.weekEnd}
             </p>
           </div>
-          <div className="text-right">
-            <div className="text-2xl font-mono font-bold text-gray-100">
+          <div className="closing-event-view__rate-group">
+            <div className="closing-event-view__rate">
               {summary.integrityRate}%
             </div>
-            <div className="text-xs text-gray-500">Integrity Rate</div>
+            <div className="closing-event-view__rate-label">Integrity Rate</div>
           </div>
         </div>
       </header>
 
-      <div className="lg:flex lg:h-[calc(100vh-80px)]">
+      <div className="closing-event-view__layout">
         {/* Left Pane: Data Audit */}
-        <div className="lg:w-1/2 lg:border-r lg:border-surface-700 lg:overflow-y-auto p-4 space-y-4">
-          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+        <div className="closing-event-view__left-pane">
+          <h2 className="closing-event-view__section-title">
             Data Audit
           </h2>
 
@@ -243,16 +250,16 @@ const ClosingEventView = () => {
             onQuickLog={handleQuickLog}
           />
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-surface-700 rounded-lg p-3">
-              <div className="text-xs text-gray-500">Total Expenses</div>
-              <div className="font-mono text-lg text-gray-100">
+          <div className="closing-event-view__stats-grid">
+            <div className="closing-event-view__stat">
+              <div className="closing-event-view__stat-label">Total Expenses</div>
+              <div className="closing-event-view__stat-value">
                 ${summary.totalExpenses.toFixed(2)}
               </div>
             </div>
-            <div className="bg-surface-700 rounded-lg p-3">
-              <div className="text-xs text-gray-500">Days Logged</div>
-              <div className="font-mono text-lg text-gray-100">
+            <div className="closing-event-view__stat">
+              <div className="closing-event-view__stat-label">Days Logged</div>
+              <div className="closing-event-view__stat-value">
                 {summary.workLogs.filter(l => l.integrityScore !== null).length}/7
               </div>
             </div>
@@ -260,23 +267,23 @@ const ClosingEventView = () => {
         </div>
 
         {/* Right Pane: Reflection */}
-        <div className="lg:w-1/2 lg:overflow-y-auto p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+        <div className="closing-event-view__right-pane">
+          <div className="closing-event-view__reflection-header">
+            <h2 className="closing-event-view__section-title">
               Weekly Reflection
             </h2>
-            <div className="flex gap-2">
+            <div className="closing-event-view__template-actions">
               {autoPopulatedContent && !reflection && (
                 <button
                   onClick={handleUseTemplate}
-                  className="text-xs text-accent-blue hover:text-blue-400"
+                  className="closing-event-view__template-btn"
                 >
                   Use Template
                 </button>
               )}
               <button
                 onClick={() => setShowPreview(!showPreview)}
-                className="text-xs text-gray-500 hover:text-gray-300"
+                className="closing-event-view__preview-btn"
               >
                 {showPreview ? 'Edit' : 'Preview'}
               </button>
@@ -284,22 +291,22 @@ const ClosingEventView = () => {
           </div>
 
           {summary.missedOpportunityNotes.length > 0 && !reflection && (
-            <div className="bg-surface-700 rounded-lg p-3 border-l-2 border-accent-amber">
-              <div className="text-xs text-accent-amber mb-1">
+            <div className="closing-event-view__missed-banner">
+              <div className="closing-event-view__missed-count">
                 {summary.missedOpportunityNotes.length} missed opportunity notes this week
               </div>
-              <div className="text-xs text-gray-500">
+              <div className="closing-event-view__missed-hint">
                 Click "Use Template" to auto-populate your reflection
               </div>
             </div>
           )}
 
           {showPreview ? (
-            <div className="bg-surface-700 rounded-lg p-4 min-h-[300px] markdown-content">
+            <div className="closing-event-view__preview markdown-content">
               {reflection ? (
                 <ReactMarkdown>{reflection}</ReactMarkdown>
               ) : (
-                <div className="text-gray-500 text-sm">
+                <div className="closing-event-view__preview-empty">
                   Nothing to preview yet. Write your reflection first.
                 </div>
               )}
@@ -309,32 +316,25 @@ const ClosingEventView = () => {
               value={reflection}
               onChange={(e) => setReflection(e.target.value)}
               placeholder={`## Points to Improve\n\n- What patterns did you notice?\n- What will you change next week?\n- What went well?\n\nUse markdown for formatting...`}
-              className="w-full h-[400px] lg:h-[calc(100vh-240px)] bg-surface-700 rounded-lg p-4
-                       text-sm font-mono resize-none"
+              className="closing-event-view__textarea"
             />
           )}
 
-          <div className="flex items-center justify-between text-xs text-gray-500">
+          <div className="closing-event-view__submit-bar">
             <button
-              className={`btn btn-ghost border text-sm ${
-                submitSuccess
-                  ? 'border-accent-green text-accent-green'
-                  : submitReflection.isError
-                    ? 'border-accent-red text-accent-red'
-                    : 'border-gray-500 text-gray-500 hover:text-gray-300 hover:border-gray-300'
-              }`}
+              className={submitBtnClass}
               onClick={handleSubmitReflection}
               disabled={submitReflection.isPending || !reflection}
             >
               {submitReflection.isPending
                 ? 'Submitting...'
                 : submitSuccess
-                  ? <><FontAwesomeIcon icon={faCheck} className="mr-1" />Submitted</>
+                  ? <><FontAwesomeIcon icon={faCheck} className="closing-event-view__submit-icon" />Submitted</>
                   : submitReflection.isError
                     ? 'Failed — Retry'
                     : 'Submit Reflection'}
             </button>
-            <span>{reflection.length} characters</span>
+            <span className="closing-event-view__char-count">{reflection.length} characters</span>
           </div>
         </div>
       </div>
@@ -364,7 +364,7 @@ const ClosingEventView = () => {
               <DayNotesContent log={selectedDay.log} />
               <button
                 onClick={() => { setSelectedDay(null); setIsEditing(false) }}
-                className="btn btn-ghost w-full mt-4"
+                className="closing-event-view__modal-close-btn btn btn-ghost"
               >
                 Close
               </button>

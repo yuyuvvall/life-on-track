@@ -1,3 +1,4 @@
+import './day-notes-modal.less'
 import type { ReactNode } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCheck, faXmark, faPenToSquare } from '@fortawesome/free-solid-svg-icons'
@@ -26,28 +27,16 @@ const DayNotesModal = ({
   })
 
   return (
-    <div
-      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-surface-800 w-full max-w-sm rounded-xl p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-100">
-            {formattedDate}
-          </h2>
+    <div className="day-notes-modal" onClick={onClose}>
+      <div className="day-notes-modal__content" onClick={(e) => e.stopPropagation()}>
+        <div className="day-notes-modal__header">
+          <h2 className="day-notes-modal__title">{formattedDate}</h2>
           {!isEditing && (
-            <div className="flex items-center gap-2">
-              <div className={`text-2xl ${integrityScore === 1 ? 'text-accent-green' : 'text-accent-red'}`}>
+            <div className="day-notes-modal__actions">
+              <div className={`day-notes-modal__score-icon ${integrityScore === 1 ? 'day-notes-modal__score-icon--success' : 'day-notes-modal__score-icon--failure'}`}>
                 <FontAwesomeIcon icon={integrityScore === 1 ? faCheck : faXmark} />
               </div>
-              <button
-                onClick={onEditClick}
-                className="text-gray-500 hover:text-gray-300 p-1"
-                title="Edit"
-              >
+              <button onClick={onEditClick} className="day-notes-modal__edit-btn" title="Edit">
                 <FontAwesomeIcon icon={faPenToSquare} />
               </button>
             </div>

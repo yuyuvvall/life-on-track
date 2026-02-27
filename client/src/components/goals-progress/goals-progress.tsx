@@ -1,3 +1,4 @@
+import './goals-progress.less'
 import { Link } from 'react-router-dom'
 import type { Goal, GoalLog } from '@/types'
 import GoalItem from './goal-item'
@@ -23,14 +24,14 @@ const GoalsProgress = ({
 }: GoalsProgressProps) => {
   if (goals.length === 0) {
     return (
-      <div className="bg-surface-700 rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-gray-300">Goals Progress</h3>
-          <Link to="/goals" className="text-xs text-accent-blue hover:text-blue-400">
+      <div className="goals-progress">
+        <div className="goals-progress__header">
+          <h3 className="goals-progress__title">Goals Progress</h3>
+          <Link to="/goals" className="goals-progress__link">
             Add Goals
           </Link>
         </div>
-        <div className="text-center py-4 text-gray-500 text-sm">
+        <div className="goals-progress__empty">
           No goals set
         </div>
       </div>
@@ -38,15 +39,15 @@ const GoalsProgress = ({
   }
 
   return (
-    <div className="bg-surface-700 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-gray-300">Goals Progress</h3>
-        <Link to="/goals" className="text-xs text-accent-blue hover:text-blue-400">
+    <div className="goals-progress">
+      <div className="goals-progress__header">
+        <h3 className="goals-progress__title">Goals Progress</h3>
+        <Link to="/goals" className="goals-progress__link">
           View All
         </Link>
       </div>
 
-      <div className="space-y-3">
+      <div className="goals-progress__list">
         {goals.slice(0, 4).map((goal) => (
           <GoalItem
             key={goal.id}
@@ -72,7 +73,7 @@ const GoalsProgress = ({
       {goals.length > 4 && (
         <Link
           to="/goals"
-          className="block text-center text-xs text-gray-500 hover:text-gray-300 mt-3"
+          className="goals-progress__more-link"
         >
           +{goals.length - 4} more goals
         </Link>

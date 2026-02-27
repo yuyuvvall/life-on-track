@@ -1,0 +1,244 @@
+@import './variables.less';
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  font-size: 14px;
+}
+
+body {
+  background-color: @surface-900;
+  color: @gray-100;
+  font-family: @font-sans;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.4;
+  overflow-x: hidden;
+  margin: 0;
+}
+
+.app-root {
+  min-height: 100vh;
+  background-color: @surface-900;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: @surface-800;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: @surface-500;
+  border-radius: @radius-full;
+}
+
+// Monospace data styling
+.data-value {
+  font-family: @font-mono;
+  font-size: 0.875em;
+  letter-spacing: -0.025em;
+}
+
+// Category badges
+.badge {
+  padding: @space-0_5 @space-1_5;
+  font-size: 0.75em;
+  font-weight: 500;
+  border-radius: @radius;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-work {
+  background-color: fade(@blue-500, 20%);
+  color: @blue-400;
+}
+
+.badge-admin {
+  background-color: fade(@purple-500, 20%);
+  color: @purple-400;
+}
+
+.badge-personal {
+  background-color: fade(@emerald-500, 20%);
+  color: @emerald-400;
+}
+
+// Urgent task highlight
+.task-urgent {
+  border-left: 2px solid @accent-amber;
+}
+
+// Swipe action backgrounds
+.swipe-complete {
+  background-color: fade(@accent-green, 20%);
+}
+
+// Form inputs
+input,
+textarea,
+select {
+  background-color: @surface-700;
+  border: 1px solid @surface-500;
+  border-radius: @radius;
+  padding: @space-2 @space-3;
+  color: @gray-100;
+  outline: none;
+
+  &::placeholder {
+    color: @gray-500;
+  }
+
+  &:focus {
+    border-color: @accent-blue;
+    box-shadow: 0 0 0 1px fade(@accent-blue, 50%);
+  }
+}
+
+// Compact button
+.btn {
+  padding: @space-1_5 @space-3;
+  border-radius: @radius;
+  font-weight: 500;
+  font-size: 0.875em;
+  transition: @transition-colors;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-primary {
+  background-color: @accent-blue;
+  color: white;
+
+  &:hover {
+    background-color: @blue-600;
+  }
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: @gray-400;
+
+  &:hover {
+    color: @gray-100;
+    background-color: @surface-600;
+  }
+}
+
+// Integrity score buttons
+.integrity-btn {
+  width: 3em;
+  height: 3em;
+  border-radius: @radius-lg;
+  font-family: @font-mono;
+  font-size: 1.125em;
+  font-weight: 700;
+  transition: @transition-all;
+  cursor: pointer;
+  border: none;
+}
+
+.integrity-btn-success {
+  background-color: fade(@accent-green, 20%);
+  color: @accent-green;
+
+  &:hover {
+    background-color: fade(@accent-green, 30%);
+  }
+}
+
+.integrity-btn-fail {
+  background-color: fade(@accent-red, 20%);
+  color: @accent-red;
+
+  &:hover {
+    background-color: fade(@accent-red, 30%);
+  }
+}
+
+.integrity-btn-active {
+  box-shadow: 0 0 0 2px @surface-900, 0 0 0 4px currentColor;
+}
+
+// Heatmap cell
+.heatmap-cell {
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: @radius-sm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75em;
+  font-family: @font-mono;
+}
+
+.heatmap-success {
+  background-color: fade(@accent-green, 30%);
+  color: @accent-green;
+}
+
+.heatmap-fail {
+  background-color: fade(@accent-red, 30%);
+  color: @accent-red;
+}
+
+.heatmap-empty {
+  background-color: @surface-600;
+  color: @gray-600;
+}
+
+// Markdown content
+.markdown-content {
+  h1 { font-size: 1.25em; font-weight: 700; margin-bottom: @space-2; }
+  h2 { font-size: 1.125em; font-weight: 700; margin-bottom: @space-2; }
+  h3 { font-size: 1em; font-weight: 700; margin-bottom: @space-1; }
+  p { margin-bottom: @space-2; }
+  ul { list-style: disc inside; margin-bottom: @space-2; }
+  ol { list-style: decimal inside; margin-bottom: @space-2; }
+  code {
+    background-color: @surface-600;
+    padding: @space-0_5 @space-1;
+    border-radius: @radius;
+    font-size: 0.875em;
+    font-family: @font-mono;
+  }
+  pre {
+    background-color: @surface-700;
+    padding: @space-3;
+    border-radius: @radius;
+    margin-bottom: @space-2;
+    overflow-x: auto;
+  }
+  blockquote {
+    border-left: 2px solid @surface-500;
+    padding-left: @space-3;
+    font-style: italic;
+    color: @gray-400;
+  }
+}
+
+// Scrollbar-hide utility (used by expense quick add)
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+// No-scrollbar utility
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

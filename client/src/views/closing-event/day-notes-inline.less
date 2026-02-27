@@ -1,0 +1,85 @@
+@import '../../styles/variables.less';
+
+.day-notes-inline {
+  background-color: @surface-700;
+  border-radius: @radius-lg;
+  padding: @space-4;
+  animation: slideInFromTop 200ms ease;
+
+  @keyframes slideInFromTop {
+    from {
+      transform: translateY(-0.5em);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: @space-3;
+  }
+
+  &__header-left {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+  }
+
+  &__header-right {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+  }
+
+  &__score-icon {
+    font-size: 1.25em;
+
+    &--success {
+      color: @accent-green;
+    }
+
+    &--failure {
+      color: @accent-red;
+    }
+  }
+
+  &__title {
+    font-size: 0.875em;
+    font-weight: 500;
+    color: @gray-100;
+    margin: 0;
+  }
+
+  &__edit-btn {
+    color: @gray-500;
+    font-size: 0.875em;
+    background: none;
+    border: none;
+    cursor: pointer;
+
+    &:hover {
+      color: @gray-300;
+    }
+  }
+
+  &__edit-icon {
+    margin-right: @space-1;
+  }
+
+  &__close-btn {
+    color: @gray-500;
+    font-size: 1.125em;
+    background: none;
+    border: none;
+    cursor: pointer;
+
+    &:hover {
+      color: @gray-300;
+    }
+  }
+}

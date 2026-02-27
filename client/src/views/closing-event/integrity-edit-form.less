@@ -1,0 +1,77 @@
+@import '../../styles/variables.less';
+
+.integrity-edit-form {
+  & > * + * {
+    margin-top: @space-4;
+  }
+
+  &__label {
+    display: block;
+    font-size: 0.75em;
+    color: @gray-500;
+    margin-bottom: @space-1;
+
+    &--spaced {
+      margin-bottom: @space-2;
+    }
+  }
+
+  &__score-buttons {
+    display: flex;
+    gap: @space-2;
+  }
+
+  &__score-btn {
+    flex: 1;
+    padding: @space-3 0;
+    border-radius: @radius-lg;
+    font-weight: 500;
+    transition: @transition-all;
+    background-color: @surface-700;
+    color: @gray-400;
+    border: none;
+    cursor: pointer;
+
+    &:hover {
+      background-color: @surface-600;
+    }
+
+    &--success {
+      background-color: @accent-green;
+      color: white;
+
+      &:hover {
+        background-color: @accent-green;
+      }
+    }
+
+    &--failure {
+      background-color: @accent-red;
+      color: white;
+
+      &:hover {
+        background-color: @accent-red;
+      }
+    }
+  }
+
+  &__btn-icon {
+    margin-right: @space-1;
+  }
+
+  &__textarea {
+    width: 100%;
+    height: 4em;
+    font-size: 0.875em;
+    resize: none;
+  }
+
+  &__actions {
+    display: flex;
+    gap: @space-2;
+  }
+
+  &__action-btn {
+    flex: 1;
+  }
+}
