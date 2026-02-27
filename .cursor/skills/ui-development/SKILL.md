@@ -1,10 +1,7 @@
 # UI Kit Development Skill
 
 ## Trigger
-Activate this skill whenever editing, creating, or modifying files inside `ui-kit/src/`.
-
-## Role
-`@link-to-worker/ui-kit` is a **reusable controlled-components library** consumed by the frontend via npm workspaces. It is built with Vite in library mode, uses LESS for styling, MUI + FontAwesome for UI primitives, and Storybook for documentation. Components must be stateless and fully controlled — the consuming app owns all state.
+Activate this skill whenever editing, creating, or modifying files inside `client/src/`.
 
 ---
 
@@ -13,7 +10,7 @@ Activate this skill whenever editing, creating, or modifying files inside `ui-ki
 Every component lives in its own kebab-case folder under `ui-kit/src/`:
 
 ```
-ui-kit/src/
+parent-folder/
 ├── {component}/
 │   ├── {component}.tsx              # main component (composes sub-components)
 │   ├── {component}.stories.tsx      # Storybook stories (only for the main component)
