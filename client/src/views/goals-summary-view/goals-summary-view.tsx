@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useGoals, useDeleteGoal } from '@/hooks';
-import { GoalCard } from '@/components/goal-card';
 import { GoalFormModal } from '@/components/goal-form-modal';
-import type { Goal } from '@/types';
+import GoalSection from './goal-section';
 import './goals-summary-view.less';
 
 const GoalsSummaryView = () => {
@@ -120,27 +119,3 @@ const GoalsSummaryView = () => {
 };
 
 export default GoalsSummaryView;
-
-type GoalSectionProps = {
-  title: string;
-  icon: string;
-  goals: Goal[];
-  onDelete: (id: string) => void;
-};
-
-const GoalSection = ({ title, icon, goals, onDelete }: GoalSectionProps) => {
-  return (
-    <section className="goals-summary-view__section">
-      <h2 className="goals-summary-view__section-title">
-        <span>{icon}</span>
-        {title}
-        <span className="goals-summary-view__section-count">({goals.length})</span>
-      </h2>
-      <div className="goals-summary-view__section-list">
-        {goals.map((goal) => (
-          <GoalCard key={goal.id} goal={goal} onDelete={onDelete} />
-        ))}
-      </div>
-    </section>
-  );
-};
