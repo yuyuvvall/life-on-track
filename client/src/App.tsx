@@ -8,6 +8,7 @@ import { ExpensesView } from '@/views/expenses-view';
 import { TabBar } from '@/components/tab-bar';
 import { QuickAddModal } from '@/components/quick-add-modal';
 import { IntegrityModal } from '@/components/integrity-modal';
+import { ToastHost } from '@/components/toast';
 
 // Pages where TabBar should NOT be shown
 const HIDDEN_TAB_ROUTES = ['/expense/add', '/expense/edit/', '/goals/'];
@@ -43,6 +44,9 @@ function AppContent() {
       {/* Global modals */}
       <QuickAddModal />
       <IntegrityModal />
+
+      {/* Global toast host */}
+      <ToastHost />
     </div>
   );
 }

@@ -1,0 +1,170 @@
+@import '../../styles/variables.less';
+
+.budgets-bulk-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: @space-4;
+
+  &__card {
+    background: @surface-800;
+    border-radius: @radius-3xl;
+    width: 100%;
+    max-width: 26em;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 1.5625em 3.125em -0.75em rgba(0, 0, 0, 0.25);
+    border: 1px solid @surface-700;
+  }
+
+  &__header {
+    padding: @space-5;
+    padding-bottom: @space-3;
+    border-bottom: 1px solid @surface-700;
+  }
+
+  &__subtitle {
+    color: @gray-500;
+    font-size: 0.875em;
+    margin: 0;
+  }
+
+  &__month {
+    font-size: 1.5em;
+    font-weight: 600;
+    color: @gray-100;
+    margin: @space-1 0 0;
+  }
+
+  &__rows {
+    overflow-y: auto;
+    padding: @space-2 @space-4;
+    display: flex;
+    flex-direction: column;
+    gap: @space-2;
+    flex: 1;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: @space-3;
+    padding: @space-2;
+  }
+
+  &__icon {
+    width: 2.5em;
+    height: 2.5em;
+    border-radius: @radius-full;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25em;
+    flex-shrink: 0;
+    background-color: @gray-500;
+
+    &--food { background-color: @orange-500; }
+    &--groceries { background-color: @blue-500; }
+    &--transport { background-color: @amber-500; }
+    &--shopping { background-color: @pink-500; }
+    &--bills { background-color: @slate-500; }
+    &--entertainment { background-color: @purple-500; }
+    &--health { background-color: @emerald-500; }
+    &--other { background-color: @gray-500; }
+  }
+
+  &__row-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__row-name {
+    color: @gray-100;
+    font-weight: 500;
+  }
+
+  &__row-hint {
+    color: @gray-600;
+    font-size: 0.75em;
+    margin-top: 0.125em;
+  }
+
+  &__input-wrap {
+    display: flex;
+    align-items: center;
+    gap: @space-1;
+    background: @surface-900;
+    border: 1px solid @surface-700;
+    border-radius: @radius-lg;
+    padding: 0 @space-2;
+    flex-shrink: 0;
+    width: 8em;
+
+    &:focus-within { border-color: @emerald-600; }
+  }
+
+  &__currency {
+    color: @gray-500;
+    font-size: 0.9em;
+  }
+
+  &__input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    padding: @space-2 0;
+    color: @gray-100;
+    font-size: 1em;
+    outline: none;
+
+    /* Hide number input spinners in most browsers */
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    -moz-appearance: textfield;
+  }
+
+  &__actions {
+    display: flex;
+    gap: @space-2;
+    padding: @space-4;
+    border-top: 1px solid @surface-700;
+  }
+
+  &__cancel-btn,
+  &__save-btn {
+    flex: 1;
+    padding: @space-3;
+    border-radius: @radius-lg;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    transition: @transition-colors;
+  }
+
+  &__cancel-btn {
+    background: @surface-700;
+    color: @gray-300;
+
+    &:hover { background: @surface-600; }
+  }
+
+  &__save-btn {
+    background: @emerald-600;
+    color: #fff;
+
+    &:hover:not(:disabled) { background: @emerald-500; }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+  }
+}

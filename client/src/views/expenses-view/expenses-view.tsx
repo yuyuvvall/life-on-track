@@ -1,6 +1,19 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useExpensesByDateRange, useDeleteExpense, useGenerateRecurringExpenses } from '@/hooks'
+import {
+  useExpensesByDateRange,
+  useDeleteExpense,
+  useCreateExpense,
+  useGenerateRecurringExpenses,
+  useBudgetsByMonth,
+  useUpsertBudget,
+  useDeleteBudget,
+  useChangeBudgetFromNow,
+  useRemoveBudgetEntirely,
+} from '@/hooks'
+import { showToast } from '@/store/toastStore'
+import { BudgetEditModal, BudgetsBulkModal } from '@/components'
+import type { BudgetBulkChange, BudgetBulkEntry } from '@/components'
 import type { Expense } from '@/types'
 import './expenses-view.less'
 
@@ -28,28 +41,97 @@ const CATEGORY_MODIFIER: Record<string, string> = {
 
 type ViewMode = 'timeline' | 'category'
 
+type SelectedMonth = { year: number; month: number }
+
+const shiftMonth = ({ year, month }: SelectedMonth, delta: number): SelectedMonth => {
+  const next = new Date(year, month + delta, 1)
+  return { year: next.getFullYear(), month: next.getMonth() }
+}
+
 const ExpensesView = () => {
   const navigate = useNavigate()
   const deleteExpense = useDeleteExpense()
+  const createExpense = useCreateExpense()
   const generateRecurring = useGenerateRecurringExpenses()
 
   const [viewMode, setViewMode] = useState<ViewMode>('timeline')
+  const [selectedMonth, setSelectedMonth] = useState<SelectedMonth>(() => {
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() }
+  })
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { generateRecurring.mutate() }, [])
 
-  const { startDate, endDate, monthName } = useMemo(() => {
+  const { startDate, endDate, monthName, monthKey, isCurrentMonth } = useMemo(() => {
+    const { year, month } = selectedMonth
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
     const now = new Date()
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
     return {
       startDate: firstDay.toISOString().split('T')[0],
       endDate: lastDay.toISOString().split('T')[0],
-      monthName: now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      monthKey: `${year}-${String(month + 1).padStart(2, '0')}`,
+      isCurrentMonth: year === now.getFullYear() && month === now.getMonth(),
     }
-  }, [])
+  }, [selectedMonth])
 
   const { data: expenses = [], isLoading } = useExpensesByDateRange(startDate, endDate)
+  const { data: budgets = [] } = useBudgetsByMonth(monthKey)
+  const upsertBudget = useUpsertBudget()
+  const deleteBudget = useDeleteBudget(monthKey)
+  const changeBudgetFromNow = useChangeBudgetFromNow()
+  const removeBudgetEntirely = useRemoveBudgetEntirely()
+
+  const budgetByCategory = useMemo(() => {
+    const map: Record<string, { id: number; amount: number; month: string; inheritedFromMonth: string | null }> = {}
+    for (const b of budgets) {
+      map[b.category] = {
+        id: b.id,
+        amount: b.amount,
+        month: b.month,
+        inheritedFromMonth: b.month !== monthKey ? b.month : null,
+      }
+    }
+    return map
+  }, [budgets, monthKey])
+
+  const [editingBudgetCategory, setEditingBudgetCategory] = useState<string | null>(null)
+  const [showBulkBudgetModal, setShowBulkBudgetModal] = useState(false)
+
+  const bulkBudgetEntries = useMemo<BudgetBulkEntry[]>(
+    () => budgets.map(b => ({
+      category: b.category,
+      currentAmount: b.amount,
+      directRowId: b.month === monthKey ? b.id : null,
+      inheritedFromMonth: b.month !== monthKey ? b.month : null,
+    })),
+    [budgets, monthKey]
+  )
+
+  const handleBulkBudgetSave = (changes: BudgetBulkChange[]) => {
+    setShowBulkBudgetModal(false)
+    if (changes.length === 0) return
+
+    const onError = () => showToast({ message: 'Some budgets failed to save', variant: 'error' })
+    for (const change of changes) {
+      if (change.newAmount > 0) {
+        upsertBudget.mutate(
+          { category: change.category, month: monthKey, amount: change.newAmount },
+          { onError }
+        )
+      } else if (change.directRowId !== null) {
+        deleteBudget.mutate(change.directRowId, { onError })
+      } else if (change.wasInherited) {
+        upsertBudget.mutate(
+          { category: change.category, month: monthKey, amount: 0 },
+          { onError }
+        )
+      }
+    }
+    showToast({ message: `Saved ${changes.length} budget${changes.length !== 1 ? 's' : ''}`, variant: 'info' })
+  }
 
   const groupedExpenses = useMemo(() => {
     const groups: Record<string, Expense[]> = {}
@@ -88,20 +170,41 @@ const ExpensesView = () => {
       categories[expense.category].count += 1
     })
 
+    // Surface budgeted categories even if nothing has been spent yet this month.
+    for (const b of budgets) {
+      if (!categories[b.category]) {
+        categories[b.category] = { total: 0, count: 0 }
+      }
+    }
+
     return Object.entries(categories)
       .map(([category, data]) => ({ category, ...data }))
       .sort((a, b) => b.total - a.total)
-  }, [expenses])
+  }, [expenses, budgets])
 
   const totalSpent = useMemo(() => {
     return expenses.reduce((sum, e) => sum + e.amount, 0)
   }, [expenses])
 
-  const handleDelete = (e: React.MouseEvent, id: number) => {
+  const handleDelete = (e: React.MouseEvent, expense: Expense) => {
     e.stopPropagation()
-    if (confirm('Delete this expense?')) {
-      deleteExpense.mutate(id)
-    }
+    deleteExpense.mutate(expense.id)
+    showToast({
+      message: `Deleted ₪${expense.amount.toFixed(2)} ${expense.category}`,
+      variant: 'info',
+      durationMs: 5000,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          createExpense.mutate({
+            amount: expense.amount,
+            category: expense.category,
+            note: expense.note ?? undefined,
+            createdAt: expense.createdAt,
+          })
+        },
+      },
+    })
   }
 
   const handleExpenseClick = (id: number) => {
@@ -121,10 +224,23 @@ const ExpensesView = () => {
   return (
     <div className="expenses-view">
       <div className="expenses-view__summary">
-        <p className="expenses-view__summary-month">{monthName}</p>
+        <div className="expenses-view__month-nav">
+          <button
+            className="expenses-view__month-nav-btn"
+            onClick={() => setSelectedMonth(prev => shiftMonth(prev, -1))}
+            aria-label="Previous month"
+          >‹</button>
+          <p className="expenses-view__summary-month">{monthName}</p>
+          <button
+            className="expenses-view__month-nav-btn"
+            onClick={() => setSelectedMonth(prev => shiftMonth(prev, +1))}
+            disabled={isCurrentMonth}
+            aria-label="Next month"
+          >›</button>
+        </div>
         <p className="expenses-view__summary-total">₪ {totalSpent.toFixed(2)}</p>
         <p className="expenses-view__summary-count">
-          {expenses.length} expense{expenses.length !== 1 ? 's' : ''} this month
+          {expenses.length} expense{expenses.length !== 1 ? 's' : ''} {isCurrentMonth ? 'this month' : `in ${monthName}`}
         </p>
       </div>
 
@@ -145,7 +261,7 @@ const ExpensesView = () => {
         </div>
 
         <button
-          onClick={() => navigate('/expense/add')}
+          onClick={() => navigate(isCurrentMonth ? '/expense/add' : `/expense/add?date=${endDate}`)}
           className="expenses-view__add-btn"
         >
           <span className="expenses-view__add-icon">+</span>
@@ -156,10 +272,14 @@ const ExpensesView = () => {
       <div className="expenses-view__content">
         {isLoading ? (
           <div className="expenses-view__loading">Loading...</div>
-        ) : expenses.length === 0 ? (
+        ) : expenses.length === 0 && !(viewMode === 'category') ? (
           <div className="expenses-view__empty">
-            <p className="expenses-view__empty-title">No expenses this month</p>
-            <p className="expenses-view__empty-subtitle">Tap + to add your first expense</p>
+            <p className="expenses-view__empty-title">
+              No expenses {isCurrentMonth ? 'this month' : `in ${monthName}`}
+            </p>
+            <p className="expenses-view__empty-subtitle">
+              {isCurrentMonth ? 'Tap + to add your first expense' : 'Nothing was logged for this month'}
+            </p>
           </div>
         ) : viewMode === 'timeline' ? (
           groupedExpenses.map(([date, dayExpenses]) => (
@@ -186,7 +306,7 @@ const ExpensesView = () => {
                       <p>₪ {expense.amount.toFixed(2)}</p>
                     </div>
                     <button
-                      onClick={(e) => handleDelete(e, expense.id)}
+                      onClick={(e) => handleDelete(e, expense)}
                       className="expenses-view__delete-btn"
                     >
                       <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -200,8 +320,38 @@ const ExpensesView = () => {
           ))
         ) : (
           <div className="expenses-view__categories">
+            <div className="expenses-view__categories-header">
+              <span className="expenses-view__categories-title">
+                {categoryBreakdown.length > 0 ? 'Categories' : `No spend or budgets ${isCurrentMonth ? 'this month' : `in ${monthName}`}`}
+              </span>
+              <button
+                className="expenses-view__edit-budgets-btn"
+                onClick={() => setShowBulkBudgetModal(true)}
+                type="button"
+              >
+                Edit budgets
+              </button>
+            </div>
             {categoryBreakdown.map(({ category, total, count }) => {
-              const percentage = totalSpent > 0 ? (total / totalSpent) * 100 : 0
+              const budgetEntry = budgetByCategory[category]
+              const budget = budgetEntry?.amount ?? 0
+              const hasBudget = budget > 0
+              const spentPct = hasBudget
+                ? Math.min(100, (total / budget) * 100)
+                : (totalSpent > 0 ? (total / totalSpent) * 100 : 0)
+              const overBudget = hasBudget && total > budget
+              const remaining = hasBudget ? budget - total : 0
+              const shareOfWallet = totalSpent > 0 ? (total / totalSpent) * 100 : 0
+              const budgetUsedPct = hasBudget ? (total / budget) * 100 : 0
+              const inheritedFromMonth = budgetEntry?.inheritedFromMonth ?? null
+              const inheritedLabel = inheritedFromMonth
+                ? new Date(
+                    Number(inheritedFromMonth.split('-')[0]),
+                    Number(inheritedFromMonth.split('-')[1]) - 1,
+                    1
+                  ).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                : null
+
               return (
                 <div key={category} className="expenses-view__category-card">
                   <div className="expenses-view__category-header">
@@ -217,25 +367,112 @@ const ExpensesView = () => {
                         <p className="expenses-view__category-count">
                           {count} expense{count !== 1 ? 's' : ''}
                         </p>
-                        <p className="expenses-view__category-pct">{percentage.toFixed(1)}%</p>
+                        <p className="expenses-view__category-pct">{shareOfWallet.toFixed(1)}%</p>
                       </div>
                     </div>
                   </div>
                   <div className="expenses-view__progress-track">
+                    {hasBudget && (
+                      <div className={`expenses-view__progress-budget expenses-view__progress-budget--${mod(category)}`} />
+                    )}
                     <div
                       className={`expenses-view__progress-fill expenses-view__progress-fill--${mod(category)}`}
-                      style={{ width: `${percentage}%` }}
+                      style={{ width: `${spentPct}%` }}
                     />
                   </div>
+                  {hasBudget ? (
+                    <button
+                      className={`expenses-view__budget-line${overBudget ? ' expenses-view__budget-line--over' : ''}`}
+                      onClick={() => setEditingBudgetCategory(category)}
+                      type="button"
+                    >
+                      <span>
+                        {overBudget
+                          ? `₪ ${(total - budget).toFixed(2)} over ₪${budget.toFixed(2)} budget`
+                          : `₪ ${remaining.toFixed(2)} left of ₪${budget.toFixed(2)}`}
+                      </span>
+                      <span className="expenses-view__budget-line-pct">
+                        · {budgetUsedPct.toFixed(0)}%
+                      </span>
+                      {inheritedLabel && (
+                        <span className="expenses-view__budget-line-inherited">
+                          · carried from {inheritedLabel}
+                        </span>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      className="expenses-view__budget-line expenses-view__budget-line--empty"
+                      onClick={() => setEditingBudgetCategory(category)}
+                      type="button"
+                    >
+                      + Set monthly budget
+                    </button>
+                  )}
                 </div>
               )
             })}
             <div className="expenses-view__category-summary">
-              {categoryBreakdown.length} categories with expenses this month
+              {categoryBreakdown.length} categor{categoryBreakdown.length === 1 ? 'y' : 'ies'} {isCurrentMonth ? 'this month' : `in ${monthName}`}
             </div>
           </div>
         )}
       </div>
+
+      {editingBudgetCategory && (() => {
+        const entry = budgetByCategory[editingBudgetCategory]
+        const isInherited = entry?.inheritedFromMonth != null
+        return (
+          <BudgetEditModal
+            category={editingBudgetCategory}
+            currentAmount={entry?.amount ?? 0}
+            inheritedFromMonth={entry?.inheritedFromMonth ?? null}
+            currentMonthLabel={monthName}
+            existingBudgetId={entry?.id ?? null}
+            onSave={(amount, mode) => {
+              const payload = { category: editingBudgetCategory, month: monthKey, amount }
+              const onSuccess = () => showToast({ message: `Budget saved for ${editingBudgetCategory}`, variant: 'info' })
+              const onError = () => showToast({ message: 'Failed to save budget', variant: 'error' })
+              if (mode === 'from-now-on') {
+                changeBudgetFromNow.mutate(payload, { onSuccess, onError })
+              } else {
+                upsertBudget.mutate(payload, { onSuccess, onError })
+              }
+              setEditingBudgetCategory(null)
+            }}
+            onRemove={(mode) => {
+              const onSuccess = () => showToast({ message: `Budget removed for ${editingBudgetCategory}`, variant: 'info' })
+              const onError = () => showToast({ message: 'Failed to remove budget', variant: 'error' })
+              if (mode === 'entirely') {
+                removeBudgetEntirely.mutate(
+                  { category: editingBudgetCategory, month: monthKey },
+                  { onSuccess, onError }
+                )
+              } else if (isInherited) {
+                // "Remove for this month only" on an inherited budget → write a 0 override.
+                upsertBudget.mutate(
+                  { category: editingBudgetCategory, month: monthKey, amount: 0 },
+                  { onSuccess, onError }
+                )
+              } else if (entry?.id !== undefined) {
+                // Locally-set budget → just delete the row.
+                deleteBudget.mutate(entry.id, { onSuccess, onError })
+              }
+              setEditingBudgetCategory(null)
+            }}
+            onCancel={() => setEditingBudgetCategory(null)}
+          />
+        )
+      })()}
+
+      {showBulkBudgetModal && (
+        <BudgetsBulkModal
+          currentMonthLabel={monthName}
+          entries={bulkBudgetEntries}
+          onSave={handleBulkBudgetSave}
+          onCancel={() => setShowBulkBudgetModal(false)}
+        />
+      )}
     </div>
   )
 }

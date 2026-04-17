@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCreateExpense, useUpdateExpense, useExpense, useCreateRecurringExpense } from '@/hooks'
 import { WEEK_DAY_NAMES } from '@/utils/dateConstants'
 import type { RecurrenceType } from '@/types'
@@ -21,9 +21,19 @@ const CATEGORIES = [
 
 type CategoryId = typeof CATEGORIES[number]['id']
 
+const parseInitialDate = (dateParam: string | null): Date => {
+  if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return new Date()
+  const [y, m, d] = dateParam.split('-').map(Number)
+  const now = new Date()
+  // Anchor at the given calendar day with the current wall-clock time so
+  // per-day ordering stays sensible.
+  return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
+}
+
 const ExpenseQuickAdd = () => {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
+  const [searchParams] = useSearchParams()
   const expenseId = id ? parseInt(id, 10) : undefined
   const isEditMode = expenseId !== undefined
 
@@ -35,7 +45,7 @@ const ExpenseQuickAdd = () => {
   const [amount, setAmount] = useState('0')
   const [category, setCategory] = useState<CategoryId>('Food')
   const [note, setNote] = useState('')
-  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState(() => parseInitialDate(searchParams.get('date')))
   const [showDatePicker, setShowDatePicker] = useState(false)
 
   const [isRecurring, setIsRecurring] = useState(false)

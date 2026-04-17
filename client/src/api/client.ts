@@ -3,6 +3,8 @@ import type {
   WorkLog,
   Expense,
   RecurringExpense,
+  Budget,
+  UpsertBudgetRequest,
   Goal,
   GoalLog,
   GoalStats,
@@ -193,6 +195,36 @@ export const recurringExpensesApi = {
       method: 'POST',
       purpose,
     }),
+};
+
+// Budgets API
+export const budgetsApi = {
+  getByMonth: (month: string, purpose?: string) =>
+    request<Budget[]>(`/budgets?month=${month}`, { purpose }),
+
+  upsert: (data: UpsertBudgetRequest, purpose?: string) =>
+    request<Budget>('/budgets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+
+  changeFromNow: (data: UpsertBudgetRequest, purpose?: string) =>
+    request<Budget>('/budgets/change-from-now', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+
+  removeEntirely: (category: string, month: string, purpose?: string) =>
+    request<void>('/budgets/remove-entirely', {
+      method: 'POST',
+      body: JSON.stringify({ category, month }),
+      purpose,
+    }),
+
+  delete: (id: number, purpose?: string) =>
+    request<void>(`/budgets/${id}`, { method: 'DELETE', purpose }),
 };
 
 // Goals API

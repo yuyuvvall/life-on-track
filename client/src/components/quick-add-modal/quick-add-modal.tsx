@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useUIStore } from '@/store/uiStore'
-import { useCreateExpense, useCreateTask, useAddSubTask } from '@/hooks'
-import { EXPENSE_CATEGORIES, type TaskCategory } from '@/types'
+import { useCreateExpense } from '@/hooks'
+import { tasksApi } from '@/api/client'
+import { optimisticId } from '@/utils/optimisticId'
+import { showToast } from '@/store/toastStore'
+import { EXPENSE_CATEGORIES, type TaskCategory, type Task } from '@/types'
 import './quick-add-modal.less'
 
 const QuickAddModal = () => {
   const { quickAdd, closeQuickAdd } = useUIStore()
+  const queryClient = useQueryClient()
   const createExpense = useCreateExpense()
-  const createTask = useCreateTask()
-  const addSubTask = useAddSubTask()
 
   const [amount, setAmount] = useState('')
   const [expenseCategory, setExpenseCategory] = useState<string>(EXPENSE_CATEGORIES[0])
@@ -42,29 +45,74 @@ const QuickAddModal = () => {
     )
   }
 
-  const handleTaskSubmit = async (e: React.FormEvent) => {
+  const handleTaskSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!taskTitle.trim()) return
+    const title = taskTitle.trim()
+    if (!title) return
 
-    createTask.mutate(
-      {
-        title: taskTitle.trim(),
-        category: taskCategory,
-        deadline: taskDeadline || undefined,
-      },
-      {
-        onSuccess: async (task) => {
-          if (subtasks.length > 0) {
-            for (const text of subtasks) {
-              if (text.trim()) {
-                await addSubTask.mutateAsync({ taskId: task.id, text: text.trim() })
-              }
-            }
-          }
-          closeQuickAdd()
-        },
-      }
+    const cleanSubtasks = subtasks.map((t) => t.trim()).filter(Boolean)
+    const tempTaskId = optimisticId()
+    const tempTask: Task = {
+      id: tempTaskId,
+      parentId: null,
+      title,
+      subTasks: cleanSubtasks.map((text) => ({
+        id: optimisticId(),
+        text,
+        completed: false,
+      })),
+      category: taskCategory,
+      deadline: taskDeadline || null,
+      scheduledCompleteDate: null,
+      isCompleted: false,
+      createdAt: new Date().toISOString(),
+    }
+
+    queryClient.setQueryData<Task[]>(['tasks'], (old) =>
+      old ? [tempTask, ...old] : [tempTask],
     )
+
+    closeQuickAdd()
+
+    ;(async () => {
+      try {
+        const serverTask = await tasksApi.create(
+          {
+            title,
+            category: taskCategory,
+            deadline: taskDeadline || undefined,
+          },
+          'Create new task',
+        )
+
+        queryClient.setQueryData<Task[]>(['tasks'], (old) =>
+          old?.map((t) =>
+            t.id === tempTaskId
+              ? { ...serverTask, subTasks: tempTask.subTasks }
+              : t,
+          ),
+        )
+
+        if (cleanSubtasks.length > 0) {
+          await Promise.all(
+            cleanSubtasks.map((text) =>
+              tasksApi.addSubTask(
+                { taskId: serverTask.id, text },
+                'Add subtask',
+              ),
+            ),
+          )
+        }
+
+        queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      } catch {
+        queryClient.setQueryData<Task[]>(['tasks'], (old) =>
+          old?.filter((t) => t.id !== tempTaskId),
+        )
+        queryClient.invalidateQueries({ queryKey: ['tasks'] })
+        showToast({ message: 'Could not create task', variant: 'error' })
+      }
+    })()
   }
 
   const handleAddSubtask = () => {
@@ -235,10 +283,9 @@ const QuickAddModal = () => {
 
             <button
               type="submit"
-              disabled={createTask.isPending || addSubTask.isPending}
               className="quick-add-modal__submit-btn btn btn-primary"
             >
-              {createTask.isPending || addSubTask.isPending ? 'Adding...' : 'Add Task'}
+              Add Task
             </button>
           </form>
         )}

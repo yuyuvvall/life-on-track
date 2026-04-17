@@ -49,6 +49,20 @@ export interface RecurringExpense {
   createdAt: string;
 }
 
+export interface Budget {
+  id: number;
+  category: string;
+  month: string;   // 'YYYY-MM'
+  amount: number;
+  createdAt: string;
+}
+
+export interface UpsertBudgetRequest {
+  category: string;
+  month: string;
+  amount: number;
+}
+
 export type GoalType = 'reading' | 'frequency' | 'numeric';
 export type FrequencyPeriod = 'daily' | 'weekly' | 'monthly';
 

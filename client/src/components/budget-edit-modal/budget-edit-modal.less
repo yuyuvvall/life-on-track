@@ -1,0 +1,177 @@
+@import '../../styles/variables.less';
+
+.budget-edit-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: @space-4;
+
+  &__card {
+    background: @surface-800;
+    border-radius: @radius-3xl;
+    width: 100%;
+    max-width: 22em;
+    overflow: hidden;
+    box-shadow: 0 1.5625em 3.125em -0.75em rgba(0, 0, 0, 0.25);
+    border: 1px solid @surface-700;
+  }
+
+  &__header {
+    padding: @space-5;
+    padding-bottom: @space-3;
+    border-bottom: 1px solid @surface-700;
+  }
+
+  &__subtitle {
+    color: @gray-500;
+    font-size: 0.875em;
+    margin: 0;
+  }
+
+  &__category {
+    font-size: 1.5em;
+    font-weight: 600;
+    color: @gray-100;
+    margin: @space-1 0 0;
+  }
+
+  &__inherited-hint {
+    color: @gray-500;
+    font-size: 0.75em;
+    margin: @space-2 0 0;
+  }
+
+  &__choice-group {
+    display: flex;
+    flex-direction: column;
+    gap: @space-2;
+    padding: @space-4;
+    border-top: 1px solid @surface-700;
+  }
+
+  &__choice-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: @space-1;
+    padding: @space-3 @space-4;
+    background: @surface-700;
+    color: @gray-200;
+    border: none;
+    border-radius: @radius-lg;
+    cursor: pointer;
+    text-align: left;
+    transition: @transition-colors;
+
+    &:hover:not(:disabled) { background: @surface-600; }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    &--primary {
+      background: @emerald-600;
+      color: #fff;
+
+      &:hover:not(:disabled) { background: @emerald-500; }
+    }
+
+    &--danger {
+      background: transparent;
+      color: @red-400;
+      border: 1px solid @surface-700;
+
+      &:hover { background: @surface-700; }
+    }
+  }
+
+  &__choice-title {
+    font-weight: 600;
+    font-size: 0.95em;
+  }
+
+  &__choice-sub {
+    color: @gray-400;
+    font-size: 0.8em;
+
+    .budget-edit-modal__choice-btn--primary & { color: rgba(255, 255, 255, 0.8); }
+  }
+
+  &__single-save {
+    padding: @space-4;
+    border-top: 1px solid @surface-700;
+  }
+
+  &__body {
+    padding: @space-5;
+    display: flex;
+    flex-direction: column;
+    gap: @space-2;
+  }
+
+  &__label {
+    color: @gray-500;
+    font-size: 0.875em;
+  }
+
+  &__input {
+    background: @surface-900;
+    border: 1px solid @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-3;
+    color: @gray-100;
+    font-size: 1.25em;
+    font-weight: 500;
+    outline: none;
+
+    &:focus { border-color: @emerald-600; }
+  }
+
+  &__actions {
+    display: flex;
+    gap: @space-2;
+    padding: @space-4;
+    border-top: 1px solid @surface-700;
+  }
+
+  &__cancel-btn,
+  &__remove-btn,
+  &__save-btn {
+    flex: 1;
+    padding: @space-3;
+    border-radius: @radius-lg;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    transition: @transition-colors;
+  }
+
+  &__cancel-btn {
+    background: @surface-700;
+    color: @gray-300;
+
+    &:hover { background: @surface-600; }
+
+    &--standalone {
+      flex: none;
+      margin-top: @space-1;
+    }
+  }
+
+  &__remove-btn {
+    background: transparent;
+    color: @red-400;
+    border: 1px solid @surface-700;
+
+    &:hover { background: @surface-700; }
+  }
+
+  &__save-btn {
+    background: @emerald-600;
+    color: #fff;
+
+    &:hover:not(:disabled) { background: @emerald-500; }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+  }
+}

@@ -35,3 +35,7 @@ This is a full-stack web application:
 ## Agent Delegation
 - **frontend-developer**: React components, pages, routing, forms, auth state, API calls, UI styling, UI tests
 - Both agents should reference the skills in `.cursor/skills/` for requirements
+
+## Planing
+- All plans must be written inside the /plans folder.
+- A plan name should always be names like this template: name-of-plan-{date}.
