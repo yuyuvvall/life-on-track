@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/code/life-on-track/client/src -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) -exec grep -l \"useCreateExpense\\\\|useUpdateExpense\\\\|useDeleteExpense\\\\|useExpenses\\\\|expensesApi\" {} \\\\;)",
+      "Bash(xargs grep *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run build --workspace=client)",
+      "Bash(npm run build --workspace=server)",
+      "Bash(npm run dev --workspace=client)",
+      "Bash(npm run dev --workspace=server)",
+      "Bash(npm run start --workspace=server)",
+      "Bash(npm run test --workspace=client)",
+      "Bash(npm run test --workspace=server)",
+      "Bash(npm run test:watch --workspace=client)",
+      "Bash(npm run test:watch --workspace=server)",
+      "*",
+      "Bash(npx vitest *)",
+      "Bash(npx *)"
+    ]
+  }
+}

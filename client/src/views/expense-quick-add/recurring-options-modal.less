@@ -1,0 +1,142 @@
+@import '../../styles/variables.less';
+
+.recurring-options-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: @space-4;
+
+  &__card {
+    background: @surface-800;
+    border-radius: @radius-3xl;
+    width: 100%;
+    max-width: 24em;
+    overflow: hidden;
+    box-shadow: 0 1.5625em 3.125em -0.75em rgba(0, 0, 0, 0.25);
+    border: 1px solid @surface-700;
+  }
+
+  &__header {
+    padding: @space-5;
+    padding-bottom: @space-3;
+    border-bottom: 1px solid @surface-700;
+  }
+
+  &__subtitle {
+    color: @gray-500;
+    font-size: 0.875em;
+    margin: 0;
+  }
+
+  &__title {
+    font-size: 1.5em;
+    font-weight: 300;
+    color: @gray-100;
+    margin-top: @space-1;
+    margin-bottom: 0;
+  }
+
+  &__body {
+    padding: @space-4;
+  }
+
+  &__type-group {
+    display: flex;
+    gap: @space-2;
+    margin-bottom: @space-4;
+  }
+
+  &__type-btn {
+    flex: 1;
+    padding: @space-3 0;
+    border-radius: @radius-xl;
+    font-weight: 500;
+    transition: @transition-colors;
+    border: none;
+    cursor: pointer;
+    background: @surface-700;
+    color: @gray-400;
+
+    &--active {
+      background: @accent-blue;
+      color: white;
+    }
+  }
+
+  &__day-label {
+    color: @gray-500;
+    font-size: 0.875em;
+    margin-bottom: @space-2;
+  }
+
+  &__day-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: @space-1;
+
+    &--scrollable {
+      max-height: 12em;
+      overflow-y: auto;
+    }
+  }
+
+  &__day-btn {
+    padding: @space-2 0;
+    border-radius: @radius-lg;
+    font-size: 0.875em;
+    font-weight: 500;
+    transition: @transition-colors;
+    border: none;
+    cursor: pointer;
+    background: @surface-700;
+    color: @gray-400;
+
+    &:hover {
+      background: @surface-600;
+    }
+
+    &--selected {
+      background: @accent-blue;
+      color: white;
+    }
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: @space-2;
+    padding: 0 @space-4 @space-4;
+  }
+
+  &__cancel-btn,
+  &__save-btn {
+    padding: @space-2 @space-6;
+    font-weight: 500;
+    border-radius: @radius-lg;
+    transition: @transition-colors;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+  }
+
+  &__cancel-btn {
+    color: @gray-400;
+
+    &:hover {
+      color: @gray-200;
+      background: @surface-700;
+    }
+  }
+
+  &__save-btn {
+    color: @accent-blue;
+
+    &:hover {
+      background: @surface-700;
+    }
+  }
+}

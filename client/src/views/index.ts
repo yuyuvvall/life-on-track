@@ -1,5 +1,6 @@
-export { PulseDashboard } from './PulseDashboard';
-export { ClosingEventView } from './ClosingEventView';
-export { GoalsSummaryView } from './GoalsSummaryView';
-export { GoalDetailView } from './GoalDetailView';
-
+export { PulseDashboard } from './pulse-dashboard'
+export { ClosingEventView } from './closing-event'
+export { GoalsSummaryView } from './goals-summary-view'
+export { GoalDetailView } from './goal-detail-view'
+export { ExpensesView } from './expenses-view'
+export { ExpenseQuickAdd } from './expense-quick-add'

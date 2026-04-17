@@ -1,0 +1,70 @@
+@import '../../styles/variables.less';
+
+.pulse-dashboard {
+  background: @surface-900;
+  padding-bottom: @space-24;
+
+  &__header {
+    background: fade(@surface-900, 95%);
+    border-bottom: 1px solid @surface-700;
+  }
+
+  &__header-inner {
+    padding: @space-3 @space-4;
+  }
+
+  &__title {
+    font-size: 1.125em;
+    font-weight: 600;
+    color: @gray-100;
+    letter-spacing: -0.025em;
+    margin-bottom: @space-3;
+  }
+
+  &__main {
+    padding: @space-4;
+    display: flex;
+    flex-direction: column;
+    gap: @space-4;
+  }
+
+  &__view-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__toggle-group {
+    display: flex;
+    background: @surface-800;
+    border-radius: @radius-lg;
+    padding: @space-1;
+  }
+
+  &__toggle-btn {
+    padding: @space-1_5 @space-4;
+    font-size: 0.875em;
+    font-weight: 500;
+    border-radius: @radius-md;
+    transition: @transition-all;
+    color: @gray-400;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+
+    &:hover {
+      color: @gray-300;
+    }
+
+    &--active {
+      background: @surface-700;
+      color: @gray-100;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+  }
+
+  &__swipe-hint {
+    font-size: 0.75em;
+    color: @gray-600;
+  }
+}

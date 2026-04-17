@@ -1,0 +1,128 @@
+@import '../../styles/variables.less';
+
+.goal-card {
+  display: block;
+  background-color: @surface-700;
+  border-radius: @radius-lg;
+  padding: @space-4;
+  transition: @transition-colors;
+  text-decoration: none;
+  color: inherit;
+
+  &:hover {
+    background-color: @surface-600;
+  }
+
+  &:hover &__title {
+    color: #fff;
+  }
+
+  &:hover &__edit-btn,
+  &:hover &__archive-btn {
+    opacity: 1;
+  }
+
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: @space-2;
+  }
+
+  &__title-group {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+  }
+
+  &__icon {
+    font-size: 1.125em;
+  }
+
+  &__title {
+    font-weight: 500;
+    color: @gray-100;
+    transition: @transition-colors;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+  }
+
+  &__edit-btn {
+    opacity: 0;
+    color: @gray-600;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: @transition-all;
+
+    &:hover {
+      color: @accent-blue;
+    }
+  }
+
+  &__edit-icon {
+    width: 1em;
+    height: 1em;
+  }
+
+  &__archive-btn {
+    opacity: 0;
+    color: @gray-600;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.875em;
+    transition: @transition-all;
+
+    &:hover {
+      color: @accent-red;
+    }
+  }
+
+  &__progress-label {
+    font-size: 0.75em;
+    color: @gray-400;
+    font-family: @font-mono;
+    margin-bottom: @space-2;
+  }
+
+  &__progress-track {
+    height: 0.5em;
+    background-color: @surface-500;
+    border-radius: @radius-full;
+    overflow: hidden;
+  }
+
+  &__progress-fill {
+    height: 100%;
+    border-radius: @radius-full;
+    transition: @transition-all;
+
+    &--green {
+      background-color: @accent-green;
+    }
+
+    &--blue {
+      background-color: @accent-blue;
+    }
+
+    &--amber {
+      background-color: @accent-amber;
+    }
+
+    &--purple {
+      background-color: @purple-500;
+    }
+  }
+
+  &__target-date {
+    margin-top: @space-2;
+    font-size: 0.75em;
+    color: @gray-500;
+  }
+}

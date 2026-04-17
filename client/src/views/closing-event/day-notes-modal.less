@@ -1,0 +1,67 @@
+@import '../../styles/variables.less';
+
+.day-notes-modal {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: @space-4;
+
+  &__content {
+    background-color: @surface-800;
+    width: 100%;
+    max-width: 24em;
+    border-radius: @radius-xl;
+    padding: @space-5;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: @space-4;
+  }
+
+  &__title {
+    font-size: 1.125em;
+    font-weight: 600;
+    color: @gray-100;
+    margin: 0;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+  }
+
+  &__score-icon {
+    font-size: 1.5em;
+
+    &--success {
+      color: @accent-green;
+    }
+
+    &--failure {
+      color: @accent-red;
+    }
+  }
+
+  &__edit-btn {
+    color: @gray-500;
+    padding: @space-1;
+    background: none;
+    border: none;
+    cursor: pointer;
+
+    &:hover {
+      color: @gray-300;
+    }
+  }
+}

@@ -115,6 +115,16 @@ CREATE TABLE IF NOT EXISTS recurring_expenses (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 5b. Monthly Category Budgets
+CREATE TABLE IF NOT EXISTS category_budgets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,
+    month TEXT NOT NULL CHECK (month GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'),
+    amount REAL NOT NULL CHECK (amount >= 0),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(category, month)
+);
+
 -- 6. Weekly Reflections
 CREATE TABLE IF NOT EXISTS weekly_reflections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,6 +141,7 @@ CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id);
 CREATE INDEX IF NOT EXISTS idx_work_logs_date ON work_logs(log_date);
 CREATE INDEX IF NOT EXISTS idx_expenses_created ON expenses(created_at);
 CREATE INDEX IF NOT EXISTS idx_recurring_expenses_active ON recurring_expenses(is_active);
+CREATE INDEX IF NOT EXISTS idx_category_budgets_month ON category_budgets(month);
 `;
 
 // Initialize schema on startup

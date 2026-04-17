@@ -1,0 +1,81 @@
+@import '../../styles/variables.less';
+
+.weekly-stats {
+  display: flex;
+  gap: @space-2;
+  overflow-x: auto;
+  padding-bottom: @space-2;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  &__card {
+    background: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-2 @space-3;
+    flex-shrink: 0;
+    min-width: 6.25em;
+    transition: @transition-colors;
+    text-decoration: none;
+    color: inherit;
+
+    &:hover {
+      background: @surface-600;
+    }
+  }
+
+  &__label {
+    font-size: 0.75em;
+    color: @gray-500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__value-row {
+    display: flex;
+    align-items: baseline;
+    gap: @space-1;
+    margin-top: @space-0_5;
+  }
+
+  &__value {
+    font-family: @font-mono;
+    font-size: 0.875em;
+    font-weight: 500;
+    color: @gray-100;
+  }
+
+  &__add-link {
+    font-size: 0.75em;
+    color: @accent-blue;
+  }
+
+  &__progress-track {
+    margin-top: @space-1_5;
+    height: 0.25em;
+    background: @surface-500;
+    border-radius: @radius-full;
+    overflow: hidden;
+  }
+
+  &__progress-fill {
+    height: 100%;
+    border-radius: @radius-full;
+    transition: @transition-all;
+
+    &--complete {
+      background: @accent-green;
+    }
+
+    &--mid {
+      background: @accent-blue;
+    }
+
+    &--low {
+      background: @accent-amber;
+    }
+  }
+}

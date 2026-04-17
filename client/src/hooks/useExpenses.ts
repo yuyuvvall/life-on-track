@@ -1,11 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { expensesApi, recurringExpensesApi } from '@/api/client';
-import type { 
-  CreateExpenseRequest, 
+import type {
+  Expense,
+  CreateExpenseRequest,
   UpdateExpenseRequest,
   CreateRecurringExpenseRequest,
   UpdateRecurringExpenseRequest,
 } from '@/types';
+import { useOptimisticMutation } from './useOptimisticMutation';
 
 // Regular Expenses Hooks
 
@@ -58,14 +60,21 @@ export function useUpdateExpense() {
 }
 
 export function useDeleteExpense() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: (id: number) => expensesApi.delete(id, 'Delete expense'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      queryClient.invalidateQueries({ queryKey: ['weeklySummary'] });
+  return useOptimisticMutation<void, number>({
+    mutationFn: (id) => expensesApi.delete(id, 'Delete expense'),
+    queryKeys: [['expenses']],
+    optimisticUpdate: (qc, id) => {
+      qc.setQueryData<Expense[]>(['expenses'], (old) =>
+        old?.filter((e) => e.id !== id),
+      );
+      qc.setQueriesData<Expense[]>(
+        { queryKey: ['expenses', 'range'] },
+        (old) => old?.filter((e) => e.id !== id),
+      );
+      qc.removeQueries({ queryKey: ['expenses', id] });
     },
+    invalidateOnSettled: [['weeklySummary']],
+    errorMessage: 'Could not delete expense',
   });
 }
 

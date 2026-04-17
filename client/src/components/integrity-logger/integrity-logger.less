@@ -1,0 +1,194 @@
+@import '../../styles/variables.less';
+
+.integrity-logger {
+  &__skeleton {
+    height: @space-16;
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    animation: integrity-logger-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  // ── Compact card ──────────────────────────────────────────────
+  &__compact {
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-3;
+  }
+
+  &__compact-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__label {
+    font-size: 0.75em;
+    color: @gray-500;
+  }
+
+  &__status {
+    font-family: @font-mono;
+    font-size: 1.125em;
+
+    &--success { color: @accent-green; }
+    &--missed  { color: @accent-red; }
+  }
+
+  &__not-logged {
+    color: @gray-400;
+    font-size: 0.875em;
+  }
+
+  &__buttons {
+    display: flex;
+    gap: @space-2;
+  }
+
+  // ── Note form (compact standalone wrapper) ────────────────────
+  &__note-form {
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-3;
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: @space-2;
+    }
+
+    .integrity-logger__note-status {
+      font-size: 0.75em;
+    }
+
+    .integrity-logger__note-label {
+      font-size: 0.625em;
+      margin-bottom: @space-0_5;
+    }
+
+    .integrity-logger__textarea {
+      height: @space-12;
+    }
+
+    .btn {
+      font-size: 0.75em;
+      padding-top: @space-1_5;
+      padding-bottom: @space-1_5;
+    }
+  }
+
+  // ── Shared note-form elements ─────────────────────────────────
+  &__note-status {
+    font-weight: 500;
+
+    &--success { color: @accent-green; }
+    &--fail    { color: @accent-red; }
+  }
+
+  &__note-label {
+    display: block;
+    font-size: 0.75em;
+    color: @gray-500;
+    margin-bottom: @space-1;
+  }
+
+  &__textarea {
+    width: 100%;
+    height: @space-16;
+    font-size: 0.875em;
+    resize: none;
+  }
+
+  &__note-actions {
+    display: flex;
+    gap: @space-2;
+
+    .btn {
+      flex: 1;
+    }
+  }
+
+  // ── Full card ─────────────────────────────────────────────────
+  &__full {
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-4;
+
+    > form {
+      display: flex;
+      flex-direction: column;
+      gap: @space-3;
+    }
+
+    .integrity-logger__note-status {
+      font-size: 0.875em;
+    }
+  }
+
+  &__full-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: @space-3;
+  }
+
+  &__full-title {
+    font-size: 0.875em;
+    font-weight: 500;
+    color: @gray-300;
+  }
+
+  &__full-date {
+    font-size: 0.75em;
+    color: @gray-500;
+    font-family: @font-mono;
+  }
+
+  // ── Result (logged state) ─────────────────────────────────────
+  &__result {
+    text-align: center;
+    padding: @space-2 0;
+  }
+
+  &__result-icon {
+    font-size: 1.875em;
+    margin-bottom: @space-1;
+
+    &--success { color: @accent-green; }
+    &--fail    { color: @accent-red; }
+  }
+
+  &__result-text {
+    font-size: 0.875em;
+    color: @gray-400;
+  }
+
+  &__result-note {
+    margin-top: @space-2;
+    font-size: 0.75em;
+    font-style: italic;
+    text-align: left;
+
+    &--success { color: fade(@accent-green, 80%); }
+    &--fail    { color: fade(@accent-red, 80%); }
+  }
+
+  // ── Score buttons (full mode) ─────────────────────────────────
+  &__score-buttons {
+    display: flex;
+    justify-content: center;
+    gap: @space-4;
+  }
+
+  &__score-btn.integrity-btn {
+    flex: 1;
+    width: auto;
+    height: 3.5em;
+    border-radius: @radius-xl;
+    font-size: 1.5em;
+  }
+}
+
+@keyframes integrity-logger-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}

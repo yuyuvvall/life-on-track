@@ -1,0 +1,70 @@
+@import '../../styles/variables.less';
+
+.spending-chart {
+  background-color: @surface-700;
+  border-radius: @radius-lg;
+  padding: @space-4;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: @space-3;
+  }
+
+  &__title {
+    font-size: 0.875em;
+    font-weight: 500;
+    color: @gray-300;
+    margin-bottom: 0;
+  }
+
+  &__total {
+    font-family: @font-mono;
+    font-size: 0.875em;
+    color: @gray-100;
+  }
+
+  &__empty {
+    text-align: center;
+    padding: @space-4 0;
+    color: @gray-500;
+    font-size: 0.875em;
+  }
+
+  &__categories {
+    & > * + * {
+      margin-top: @space-2;
+    }
+  }
+
+  &__category-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.75em;
+    margin-bottom: @space-1;
+  }
+
+  &__category-name {
+    color: @gray-400;
+  }
+
+  &__category-amount {
+    font-family: @font-mono;
+    color: @gray-300;
+  }
+
+  &__bar-track {
+    height: 0.5em;
+    background-color: @surface-500;
+    border-radius: @radius-full;
+    overflow: hidden;
+  }
+
+  &__bar-fill {
+    height: 100%;
+    border-radius: @radius-full;
+    transition: @transition-all;
+  }
+}

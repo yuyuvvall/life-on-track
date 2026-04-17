@@ -1,0 +1,435 @@
+@import '../../styles/variables.less';
+
+@emerald-200: #a7f3d0;
+@surface-750: #161616;
+
+.expenses-view {
+  background-color: @surface-900;
+  padding-bottom: @space-24;
+
+  &__summary {
+    background: linear-gradient(to right, @emerald-600, @teal-600);
+    padding: @space-6 @space-4;
+  }
+
+  &__month-nav {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+  }
+
+  &__month-nav-btn {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    border: none;
+    width: 1.75em;
+    height: 1.75em;
+    border-radius: @radius-full;
+    cursor: pointer;
+    font-size: 1em;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover:not(:disabled) { background: rgba(255, 255, 255, 0.2); }
+    &:disabled { opacity: 0.35; cursor: default; }
+  }
+
+  &__summary-month {
+    color: @emerald-200;
+    font-size: 0.875em;
+    margin: 0;
+  }
+
+  &__summary-total {
+    font-size: 1.875em;
+    font-weight: 700;
+    color: #fff;
+    margin: @space-1 0 0;
+  }
+
+  &__summary-count {
+    color: @emerald-200;
+    font-size: 0.875em;
+    margin: @space-1 0 0;
+  }
+
+  &__controls {
+    padding: @space-3 @space-4;
+    border-bottom: 1px solid @surface-700;
+    display: flex;
+    gap: @space-3;
+  }
+
+  &__toggle {
+    display: flex;
+    background-color: @surface-700;
+    border-radius: @radius-xl;
+    padding: @space-1;
+  }
+
+  &__toggle-btn {
+    padding: @space-2 @space-4;
+    border-radius: @radius-lg;
+    font-size: 0.875em;
+    font-weight: 500;
+    transition: @transition-colors;
+    color: @gray-400;
+    background: none;
+    border: none;
+    cursor: pointer;
+
+    &:hover {
+      color: @gray-200;
+    }
+
+    &--active {
+      background-color: @surface-600;
+      color: #fff;
+    }
+  }
+
+  &__add-btn {
+    flex: 1;
+    background-color: @surface-700;
+    color: @gray-200;
+    padding: @space-2 0;
+    border-radius: @radius-xl;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: @space-2;
+    transition: @transition-colors;
+    border: none;
+    cursor: pointer;
+
+    &:hover {
+      background-color: @surface-600;
+    }
+  }
+
+  &__add-icon {
+    font-size: 1.25em;
+  }
+
+  &__content {
+    padding: 0 @space-4;
+  }
+
+  &__loading {
+    padding: @space-12 0;
+    text-align: center;
+    color: @gray-500;
+  }
+
+  &__empty {
+    padding: @space-12 0;
+    text-align: center;
+  }
+
+  &__empty-title {
+    color: @gray-500;
+    margin: 0 0 @space-2;
+  }
+
+  &__empty-subtitle {
+    color: @gray-600;
+    font-size: 0.875em;
+    margin: 0;
+  }
+
+  &__date-group {
+    padding: @space-3 0;
+  }
+
+  &__date-header {
+    font-size: 0.75em;
+    color: @gray-500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 @space-2;
+  }
+
+  &__day-expenses {
+    display: flex;
+    flex-direction: column;
+    gap: @space-2;
+  }
+
+  &__expense-card {
+    background-color: @surface-800;
+    border-radius: @radius-xl;
+    padding: @space-3;
+    display: flex;
+    align-items: center;
+    gap: @space-3;
+    border-left: 0.25em solid @gray-500;
+    cursor: pointer;
+    transition: @transition-colors;
+
+    &:hover {
+      background-color: @surface-750;
+    }
+
+    &--food { border-left-color: @orange-500; }
+    &--groceries { border-left-color: @blue-500; }
+    &--transport { border-left-color: @amber-500; }
+    &--shopping { border-left-color: @pink-500; }
+    &--bills { border-left-color: @slate-500; }
+    &--entertainment { border-left-color: @purple-500; }
+    &--health { border-left-color: @emerald-500; }
+    &--other { border-left-color: @gray-500; }
+  }
+
+  &__expense-icon {
+    width: 2.5em;
+    height: 2.5em;
+    background-color: @surface-700;
+    border-radius: @radius-full;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25em;
+    flex-shrink: 0;
+  }
+
+  &__expense-detail {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__expense-category {
+    color: @gray-200;
+    font-weight: 500;
+    margin: 0;
+  }
+
+  &__expense-note {
+    color: @gray-500;
+    font-size: 0.875em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0;
+  }
+
+  &__expense-time {
+    color: @gray-600;
+    font-size: 0.75em;
+    margin: 0;
+  }
+
+  &__expense-amount {
+    text-align: right;
+
+    p {
+      color: @gray-100;
+      font-weight: 600;
+      margin: 0;
+    }
+  }
+
+  &__delete-btn {
+    padding: @space-2;
+    color: @gray-600;
+    transition: @transition-colors;
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+
+    &:hover {
+      color: @red-400;
+    }
+
+    svg {
+      width: 1em;
+      height: 1em;
+    }
+  }
+
+  // — Category view —
+
+  &__categories {
+    padding: @space-4 0;
+    display: flex;
+    flex-direction: column;
+    gap: @space-3;
+  }
+
+  &__categories-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 @space-1;
+  }
+
+  &__categories-title {
+    color: @gray-500;
+    font-size: 0.75em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  &__edit-budgets-btn {
+    background: @surface-700;
+    color: @gray-200;
+    border: none;
+    padding: @space-2 @space-3;
+    border-radius: @radius-lg;
+    font-size: 0.8em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: @transition-colors;
+
+    &:hover { background: @surface-600; }
+  }
+
+  &__category-card {
+    background-color: @surface-800;
+    border-radius: @radius-xl;
+    padding: @space-4;
+  }
+
+  &__category-header {
+    display: flex;
+    align-items: center;
+    gap: @space-3;
+    margin-bottom: @space-3;
+  }
+
+  &__category-icon {
+    width: 3em;
+    height: 3em;
+    border-radius: @radius-full;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5em;
+    flex-shrink: 0;
+    background-color: @gray-500;
+
+    &--food { background-color: @orange-500; }
+    &--groceries { background-color: @blue-500; }
+    &--transport { background-color: @amber-500; }
+    &--shopping { background-color: @pink-500; }
+    &--bills { background-color: @slate-500; }
+    &--entertainment { background-color: @purple-500; }
+    &--health { background-color: @emerald-500; }
+    &--other { background-color: @gray-500; }
+  }
+
+  &__category-info {
+    flex: 1;
+  }
+
+  &__category-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__category-name {
+    color: @gray-200;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  &__category-amount {
+    color: @gray-100;
+    font-weight: 700;
+    margin: 0;
+  }
+
+  &__category-count {
+    color: @gray-500;
+    font-size: 0.875em;
+    margin: 0;
+  }
+
+  &__category-pct {
+    color: @gray-400;
+    font-size: 0.875em;
+    margin: 0;
+  }
+
+  &__progress-track {
+    position: relative;
+    height: 0.5em;
+    background-color: @surface-700;
+    border-radius: @radius-full;
+    overflow: hidden;
+  }
+
+  &__progress-budget {
+    position: absolute;
+    inset: 0;
+    border-radius: @radius-full;
+    opacity: 0.25;
+
+    &--food { background-color: @orange-500; }
+    &--groceries { background-color: @blue-500; }
+    &--transport { background-color: @amber-500; }
+    &--shopping { background-color: @pink-500; }
+    &--bills { background-color: @slate-500; }
+    &--entertainment { background-color: @purple-500; }
+    &--health { background-color: @emerald-500; }
+    &--other { background-color: @gray-500; }
+  }
+
+  &__progress-fill {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    border-radius: @radius-full;
+    transition: all 500ms ease;
+    background-color: @gray-500;
+
+    &--food { background-color: @orange-500; }
+    &--groceries { background-color: @blue-500; }
+    &--transport { background-color: @amber-500; }
+    &--shopping { background-color: @pink-500; }
+    &--bills { background-color: @slate-500; }
+    &--entertainment { background-color: @purple-500; }
+    &--health { background-color: @emerald-500; }
+    &--other { background-color: @gray-500; }
+  }
+
+  &__budget-line {
+    display: block;
+    margin-top: @space-2;
+    background: none;
+    border: none;
+    padding: 0;
+    color: @gray-500;
+    font-size: 0.8em;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover { color: @gray-300; }
+    &--over { color: @red-400; font-weight: 600; }
+    &--empty { color: @gray-600; }
+  }
+
+  &__budget-line-pct {
+    color: @gray-400;
+    margin-left: @space-1;
+  }
+
+  &__budget-line-inherited {
+    color: @gray-600;
+    font-size: 0.9em;
+    margin-left: @space-1;
+  }
+
+  &__category-summary {
+    margin-top: @space-6;
+    padding-top: @space-4;
+    border-top: 1px solid @surface-700;
+    color: @gray-500;
+    font-size: 0.875em;
+    text-align: center;
+  }
+}

@@ -1,0 +1,42 @@
+@import '../../styles/variables.less';
+
+.keypad-button {
+  height: 3.5em;
+  background: @surface-700;
+  border-radius: @radius-xl;
+  font-size: 1.25em;
+  font-weight: 500;
+  color: @gray-200;
+  border: none;
+  cursor: pointer;
+  transition: @transition-colors;
+
+  &:hover {
+    background: @surface-600;
+  }
+
+  &:active {
+    background: @surface-500;
+  }
+
+  &:disabled {
+    color: @gray-600;
+    cursor: default;
+
+    &:hover {
+      background: @surface-700;
+    }
+  }
+
+  &--operator {
+    color: @gray-600;
+  }
+
+  &--delete {
+    color: @accent-red;
+  }
+
+  &--calendar {
+    color: @accent-amber;
+  }
+}

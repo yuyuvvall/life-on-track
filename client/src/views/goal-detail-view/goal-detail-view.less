@@ -1,0 +1,647 @@
+@import '../../styles/variables.less';
+
+// ---------------------------------------------------------------------------
+// GoalDetailView
+// ---------------------------------------------------------------------------
+.goal-detail-view {
+  background-color: @surface-900;
+  padding-bottom: 6em;
+
+  &--loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__loading-text {
+    color: @gray-500;
+  }
+
+  // --- Header ---
+  &__header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background-color: fade(@surface-900, 95%);
+    backdrop-filter: blur(4px);
+    border-bottom: 1px solid @surface-700;
+  }
+
+  &__header-inner {
+    padding: @space-3 @space-4;
+  }
+
+  &__back-link {
+    font-size: 0.75em;
+    color: @accent-blue;
+    text-decoration: none;
+
+    &:hover {
+      color: @blue-400;
+    }
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: @space-1;
+  }
+
+  &__title {
+    font-size: 1.125em;
+    font-weight: 600;
+    color: @gray-100;
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+    margin: 0;
+  }
+
+  &__header-actions {
+    display: flex;
+    align-items: center;
+    gap: @space-3;
+  }
+
+  &__edit-link {
+    font-size: 0.75em;
+    color: @gray-500;
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: @space-1;
+    padding: 0;
+
+    &:hover {
+      color: @accent-blue;
+    }
+  }
+
+  &__edit-icon {
+    width: 0.875em;
+    height: 0.875em;
+  }
+
+  &__archive-link {
+    font-size: 0.75em;
+    color: @gray-500;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+
+    &:hover {
+      color: @accent-red;
+    }
+  }
+
+  // --- Main content ---
+  &__main {
+    padding: @space-4;
+    display: flex;
+    flex-direction: column;
+    gap: @space-4;
+  }
+
+  // --- Progress card ---
+  &__progress-card {
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-4;
+  }
+
+  &__progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: @space-3;
+  }
+
+  &__progress-label {
+    font-size: 0.875em;
+    color: @gray-400;
+  }
+
+  &__progress-value {
+    font-family: @font-mono;
+    font-size: 1.125em;
+    font-weight: 700;
+    color: @gray-100;
+  }
+
+  &__progress-bar-track {
+    height: 0.75em;
+    background-color: @surface-500;
+    border-radius: @radius-full;
+    overflow: hidden;
+    margin-bottom: @space-3;
+  }
+
+  &__progress-bar-fill {
+    height: 100%;
+    border-radius: @radius-full;
+    transition: @transition-all;
+    background-color: @accent-blue;
+
+    &--complete {
+      background-color: @accent-green;
+    }
+  }
+
+  &__progress-detail {
+    font-size: 0.875em;
+    color: @gray-400;
+  }
+
+  &__progress-mono {
+    font-family: @font-mono;
+    color: @gray-100;
+  }
+
+  &__progress-sub {
+    font-size: 0.875em;
+    color: @gray-400;
+    margin-top: @space-2;
+    padding-top: @space-2;
+    border-top: 1px solid @surface-500;
+  }
+
+  // --- Stats grid ---
+  &__stats-grid {
+    display: grid;
+    gap: @space-3;
+
+    &--cols-2 {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    &--cols-3 {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  &__stat {
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-4;
+
+    &--center {
+      text-align: center;
+      padding: @space-3;
+    }
+  }
+
+  &__stat-label {
+    font-size: 0.75em;
+    color: @gray-500;
+    margin-bottom: @space-1;
+  }
+
+  &__stat-value {
+    font-family: @font-mono;
+    font-size: 1.25em;
+    font-weight: 700;
+    color: @gray-100;
+
+    &--blue {
+      color: @accent-blue;
+    }
+
+    &--green {
+      color: @accent-green;
+    }
+
+    &--amber {
+      color: @accent-amber;
+    }
+  }
+
+  // --- Sub-goals ---
+  &__sub-goals {
+    // section wrapper — no extra styles needed
+  }
+
+  &__sub-goal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: @space-3;
+  }
+
+  &__section-title {
+    font-size: 0.875em;
+    font-weight: 500;
+    color: @gray-400;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0;
+  }
+
+  &__add-link {
+    font-size: 0.75em;
+    color: @accent-blue;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+
+    &:hover {
+      color: @blue-400;
+    }
+  }
+
+  &__empty-card {
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-4;
+    text-align: center;
+    color: @gray-500;
+    font-size: 0.875em;
+  }
+
+  &__empty-text {
+    margin-bottom: @space-2;
+  }
+
+  &__sub-goal-list {
+    display: flex;
+    flex-direction: column;
+    gap: @space-2;
+  }
+
+  &__sub-goal-card {
+    display: block;
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-3;
+    transition: @transition-colors;
+    text-decoration: none;
+
+    &:hover {
+      background-color: @surface-600;
+    }
+
+    &--complete {
+      opacity: 0.6;
+    }
+  }
+
+  &__sub-goal-row {
+    display: flex;
+    align-items: center;
+    gap: @space-3;
+  }
+
+  &__sub-goal-icon {
+    font-size: 0.875em;
+  }
+
+  &__sub-goal-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__sub-goal-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__sub-goal-title {
+    font-size: 0.875em;
+    color: @gray-100;
+
+    &--complete {
+      color: @gray-500;
+      text-decoration: line-through;
+    }
+  }
+
+  &__sub-goal-progress {
+    font-family: @font-mono;
+    font-size: 0.75em;
+    color: @gray-400;
+  }
+
+  &__sub-goal-bar-track {
+    height: 0.25em;
+    background-color: @surface-500;
+    border-radius: @radius-full;
+    overflow: hidden;
+    margin-top: @space-1;
+  }
+
+  &__sub-goal-bar-fill {
+    height: 100%;
+    border-radius: @radius-full;
+    transition: @transition-all;
+    background-color: @accent-amber;
+
+    &--complete {
+      background-color: @accent-green;
+    }
+  }
+
+  // --- Habit buttons ---
+  &__habit-section {
+    display: flex;
+    flex-direction: column;
+    gap: @space-3;
+  }
+
+  &__habit-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: @space-3;
+  }
+
+  &__habit-btn {
+    padding: @space-4 0;
+    border-radius: @radius-lg;
+    font-weight: 500;
+    transition: @transition-colors;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: @space-2;
+    cursor: pointer;
+    border: 2px solid transparent;
+
+    &--did {
+      background-color: fade(@accent-green, 20%);
+      border-color: @accent-green;
+      color: @accent-green;
+
+      &:hover {
+        background-color: fade(@accent-green, 30%);
+      }
+    }
+
+    &--didnt {
+      background-color: fade(@accent-red, 20%);
+      border-color: @accent-red;
+      color: @accent-red;
+
+      &:hover {
+        background-color: fade(@accent-red, 30%);
+      }
+    }
+  }
+
+  &__habit-btn-icon {
+    width: 1.25em;
+    height: 1.25em;
+  }
+
+  // --- Habit note form ---
+  &__habit-note-form {
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-4;
+    display: flex;
+    flex-direction: column;
+    gap: @space-3;
+  }
+
+  &__habit-note-status {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+    margin-bottom: @space-2;
+  }
+
+  &__habit-status-text {
+    display: flex;
+    align-items: center;
+    gap: @space-1;
+
+    &--did {
+      color: @accent-green;
+    }
+
+    &--didnt {
+      color: @accent-red;
+    }
+  }
+
+  &__habit-status-icon {
+    width: 1em;
+    height: 1em;
+  }
+
+  &__habit-note-input {
+    width: 100%;
+  }
+
+  &__habit-note-actions {
+    display: flex;
+    gap: @space-2;
+  }
+
+  &__habit-note-action {
+    flex: 1;
+
+    &--save-did {
+      background-color: @accent-green;
+      color: #fff;
+
+      &:hover {
+        background-color: @green-600;
+      }
+    }
+
+    &--save-didnt {
+      background-color: @accent-red;
+      color: #fff;
+
+      &:hover {
+        background-color: @red-600;
+      }
+    }
+  }
+
+  // --- Log progress button ---
+  &__log-progress-btn {
+    width: 100%;
+    padding: @space-3 0;
+    font-size: 1em;
+  }
+
+  // --- Log form ---
+  &__log-form {
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-4;
+    display: flex;
+    flex-direction: column;
+    gap: @space-3;
+  }
+
+  &__log-form-label {
+    display: block;
+    font-size: 0.75em;
+    color: @gray-500;
+    margin-bottom: @space-1;
+  }
+
+  &__log-form-input {
+    width: 100%;
+
+    &--mono {
+      font-size: 1.125em;
+      font-family: @font-mono;
+    }
+  }
+
+  &__log-form-actions {
+    display: flex;
+    gap: @space-2;
+  }
+
+  &__log-form-action {
+    flex: 1;
+  }
+
+  // --- History ---
+  &__history {
+    // section wrapper
+  }
+
+  &__history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: @space-3;
+  }
+
+  &__filter-group {
+    display: flex;
+    gap: @space-1;
+  }
+
+  &__filter-btn {
+    padding: @space-1 @space-2;
+    border-radius: @radius;
+    font-size: 0.75em;
+    font-weight: 500;
+    transition: @transition-colors;
+    display: flex;
+    align-items: center;
+    gap: @space-1;
+    background-color: @surface-700;
+    color: @gray-500;
+    border: none;
+    cursor: pointer;
+
+    &:hover {
+      background-color: @surface-600;
+    }
+
+    &--active-positive {
+      background-color: fade(@accent-green, 20%);
+      color: @accent-green;
+    }
+
+    &--active-negative {
+      background-color: fade(@accent-red, 20%);
+      color: @accent-red;
+    }
+  }
+
+  &__filter-icon {
+    width: 0.75em;
+    height: 0.75em;
+  }
+
+  &__log-list {
+    display: flex;
+    flex-direction: column;
+    gap: @space-2;
+  }
+
+  &__log-entry {
+    background-color: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: @transition-colors;
+
+    &:hover {
+      background-color: @surface-600;
+    }
+
+    &--frequency-positive {
+      border-left: 4px solid @accent-green;
+    }
+
+    &--frequency-negative {
+      border-left: 4px solid @accent-red;
+    }
+  }
+
+  &__log-date {
+    font-size: 0.75em;
+    color: @gray-500;
+  }
+
+  &__log-note {
+    font-size: 0.75em;
+    color: @gray-400;
+    margin-top: 0.125em;
+    font-style: italic;
+  }
+
+  &__log-right {
+    text-align: right;
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+  }
+
+  &__log-value {
+    font-family: @font-mono;
+    color: @gray-100;
+  }
+
+  &__log-unit {
+    font-size: 0.75em;
+    color: @gray-500;
+  }
+
+  &__log-diff {
+    font-size: 0.75em;
+    font-family: @font-mono;
+
+    &--positive {
+      color: @accent-green;
+    }
+
+    &--negative {
+      color: @accent-red;
+    }
+  }
+
+  &__log-status {
+    font-size: 0.875em;
+    font-weight: 500;
+
+    &--done {
+      color: @accent-green;
+    }
+
+    &--missed {
+      color: @accent-red;
+    }
+  }
+
+  &__log-edit-hint {
+    color: @gray-600;
+    font-size: 0.75em;
+  }
+}
