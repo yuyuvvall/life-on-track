@@ -66,6 +66,16 @@ const BudgetsBulkModal = ({
     )
   )
 
+  const total = rows.reduce((sum, row) => {
+    const raw = values[row.category] ?? ''
+    const parsed = raw.trim() === '' ? 0 : Number(raw)
+    return sum + (Number.isFinite(parsed) && parsed > 0 ? parsed : 0)
+  }, 0)
+  const totalLabel = total.toLocaleString('en-US', {
+    minimumFractionDigits: total % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  })
+
   const handleSave = () => {
     const changes: BudgetBulkChange[] = []
     for (const row of rows) {
@@ -129,6 +139,11 @@ const BudgetsBulkModal = ({
               </div>
             )
           })}
+        </div>
+
+        <div className="budgets-bulk-modal__total">
+          <span className="budgets-bulk-modal__total-label">Total</span>
+          <span className="budgets-bulk-modal__total-amount">₪{totalLabel}</span>
         </div>
 
         <div className="budgets-bulk-modal__actions">
