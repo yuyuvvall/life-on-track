@@ -126,6 +126,11 @@
     font-size: 1em;
     outline: none;
 
+    &:focus {
+      border-color: transparent;
+      box-shadow: none;
+    }
+
     /* Hide number input spinners in most browsers */
     &::-webkit-outer-spin-button,
     &::-webkit-inner-spin-button {
@@ -133,6 +138,25 @@
       margin: 0;
     }
     -moz-appearance: textfield;
+  }
+
+  &__total {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: @space-3 @space-5;
+    border-top: 1px solid @surface-700;
+  }
+
+  &__total-label {
+    color: @gray-300;
+    font-weight: 500;
+  }
+
+  &__total-amount {
+    color: @gray-100;
+    font-size: 1.125em;
+    font-weight: 600;
   }
 
   &__actions {

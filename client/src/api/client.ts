@@ -32,38 +32,66 @@ interface RequestOptions extends RequestInit {
   purpose?: string;
 }
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1500;
+
 async function request<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
   const { purpose, ...fetchOptions } = options;
-  
+
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...fetchOptions.headers,
   };
-  
+
   // Add X-Purpose header if provided
   if (purpose) {
     (headers as Record<string, string>)['X-Purpose'] = purpose;
   }
-  
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...fetchOptions,
-    headers,
-  });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || `HTTP ${response.status}`);
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        ...fetchOptions,
+        headers,
+      });
+
+      if (response.status === 503) {
+        // Server waking up (cold start) — retry after delay
+        lastError = new Error('Service temporarily unavailable');
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
+        continue;
+      }
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Request failed' }));
+        throw new Error(error.message || `HTTP ${response.status}`);
+      }
+
+      // Handle 204 No Content responses
+      if (response.status === 204) {
+        return undefined as T;
+      }
+
+      return response.json();
+    } catch (err) {
+      // Network errors (CORS failures from cold start manifest as TypeError)
+      if (err instanceof TypeError || (err instanceof Error && err.message === 'Service temporarily unavailable')) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt < MAX_RETRIES - 1) {
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
+          continue;
+        }
+      }
+      throw err;
+    }
   }
 
-  // Handle 204 No Content responses
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json();
+  throw lastError ?? new Error('Request failed after retries');
 }
 
 // Tasks API
