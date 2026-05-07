@@ -15,7 +15,8 @@ import { showToast } from '@/store/toastStore'
 import { BudgetEditModal, BudgetsBulkModal } from '@/components'
 import type { BudgetBulkChange, BudgetBulkEntry } from '@/components'
 import TagChipRow from '@/components/tag-chip-row'
-import type { Expense } from '@/types'
+import { useTags } from '@/hooks/useTags'
+import type { Expense, Tag } from '@/types'
 import './expenses-view.less'
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -80,6 +81,12 @@ const ExpensesView = () => {
 
   const { data: expenses = [], isLoading } = useExpensesByDateRange(startDate, endDate)
   const { data: budgets = [] } = useBudgetsByMonth(monthKey)
+  const { data: allTags = [] } = useTags(true)
+  const tagsById = useMemo(() => {
+    const map = new Map<number, Tag>()
+    for (const t of allTags) map.set(t.id, t)
+    return map
+  }, [allTags])
   const upsertBudget = useUpsertBudget()
   const deleteBudget = useDeleteBudget(monthKey)
   const changeBudgetFromNow = useChangeBudgetFromNow()
@@ -300,6 +307,23 @@ const ExpensesView = () => {
                     </div>
                     <div className="expenses-view__expense-detail">
                       <p className="expenses-view__expense-category">{expense.category}</p>
+                      {expense.tagId !== null && tagsById.has(expense.tagId) && (() => {
+                        const tag = tagsById.get(expense.tagId)!
+                        return (
+                          <span
+                            className="expenses-view__expense-tag"
+                            style={{ borderColor: tag.color }}
+                          >
+                            <span
+                              className="expenses-view__expense-tag-icon"
+                              style={{ backgroundColor: tag.color }}
+                            >
+                              {tag.icon}
+                            </span>
+                            <span className="expenses-view__expense-tag-name">{tag.name}</span>
+                          </span>
+                        )
+                      })()}
                       {expense.note && (
                         <p className="expenses-view__expense-note">{expense.note}</p>
                       )}
