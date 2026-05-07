@@ -15,7 +15,8 @@ import { showToast } from '@/store/toastStore'
 import { BudgetEditModal, BudgetsBulkModal } from '@/components'
 import type { BudgetBulkChange, BudgetBulkEntry } from '@/components'
 import TagChipRow from '@/components/tag-chip-row'
-import type { Expense } from '@/types'
+import { useTags } from '@/hooks/useTags'
+import type { Expense, Tag } from '@/types'
 import './expenses-view.less'
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -80,6 +81,12 @@ const ExpensesView = () => {
 
   const { data: expenses = [], isLoading } = useExpensesByDateRange(startDate, endDate)
   const { data: budgets = [] } = useBudgetsByMonth(monthKey)
+  const { data: allTags = [] } = useTags(true)
+  const tagsById = useMemo(() => {
+    const map = new Map<number, Tag>()
+    for (const t of allTags) map.set(t.id, t)
+    return map
+  }, [allTags])
   const upsertBudget = useUpsertBudget()
   const deleteBudget = useDeleteBudget(monthKey)
   const changeBudgetFromNow = useChangeBudgetFromNow()
@@ -182,6 +189,29 @@ const ExpensesView = () => {
       .map(([category, data]) => ({ category, ...data }))
       .sort((a, b) => b.total - a.total)
   }, [expenses, budgets])
+
+  const tagBreakdownByCategory = useMemo(() => {
+    const result: Record<string, { tag: Tag; total: number; count: number }[]> = {}
+    const accum: Record<string, Map<number, { total: number; count: number }>> = {}
+    for (const e of expenses) {
+      if (e.tagId === null) continue
+      if (!accum[e.category]) accum[e.category] = new Map()
+      const bucket = accum[e.category]
+      const prev = bucket.get(e.tagId) ?? { total: 0, count: 0 }
+      bucket.set(e.tagId, { total: prev.total + e.amount, count: prev.count + 1 })
+    }
+    for (const [category, bucket] of Object.entries(accum)) {
+      const rows: { tag: Tag; total: number; count: number }[] = []
+      for (const [tagId, stats] of bucket) {
+        const tag = tagsById.get(tagId)
+        if (!tag) continue
+        rows.push({ tag, total: stats.total, count: stats.count })
+      }
+      rows.sort((a, b) => b.total - a.total)
+      result[category] = rows
+    }
+    return result
+  }, [expenses, tagsById])
 
   const totalSpent = useMemo(() => {
     return expenses.reduce((sum, e) => sum + e.amount, 0)
@@ -300,6 +330,23 @@ const ExpensesView = () => {
                     </div>
                     <div className="expenses-view__expense-detail">
                       <p className="expenses-view__expense-category">{expense.category}</p>
+                      {expense.tagId !== null && tagsById.has(expense.tagId) && (() => {
+                        const tag = tagsById.get(expense.tagId)!
+                        return (
+                          <span
+                            className="expenses-view__expense-tag"
+                            style={{ borderColor: tag.color }}
+                          >
+                            <span
+                              className="expenses-view__expense-tag-icon"
+                              style={{ backgroundColor: tag.color }}
+                            >
+                              {tag.icon}
+                            </span>
+                            <span className="expenses-view__expense-tag-name">{tag.name}</span>
+                          </span>
+                        )
+                      })()}
                       {expense.note && (
                         <p className="expenses-view__expense-note">{expense.note}</p>
                       )}
@@ -374,6 +421,28 @@ const ExpensesView = () => {
                       </div>
                     </div>
                   </div>
+                  {(tagBreakdownByCategory[category]?.length ?? 0) > 0 && (
+                    <div className="expenses-view__category-tags">
+                      {tagBreakdownByCategory[category]!.map(({ tag, total, count }) => (
+                        <span
+                          key={tag.id}
+                          className="expenses-view__category-tag"
+                          style={{ borderColor: tag.color }}
+                        >
+                          <span
+                            className="expenses-view__category-tag-icon"
+                            style={{ backgroundColor: tag.color }}
+                          >
+                            {tag.icon}
+                          </span>
+                          <span className="expenses-view__category-tag-name">{tag.name}</span>
+                          <span className="expenses-view__category-tag-meta">
+                            ₪{total.toFixed(2)} · {count}×
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="expenses-view__progress-track">
                     {hasBudget && (
                       <div className={`expenses-view__progress-budget expenses-view__progress-budget--${mod(category)}`} />
