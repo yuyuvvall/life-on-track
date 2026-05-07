@@ -14,6 +14,7 @@ import {
 import { showToast } from '@/store/toastStore'
 import { BudgetEditModal, BudgetsBulkModal } from '@/components'
 import type { BudgetBulkChange, BudgetBulkEntry } from '@/components'
+import TagChipRow from '@/components/tag-chip-row'
 import type { Expense } from '@/types'
 import './expenses-view.less'
 
@@ -268,6 +269,8 @@ const ExpensesView = () => {
           <span>Add</span>
         </button>
       </div>
+
+      <TagChipRow mode="quick-add" isCurrentMonth={isCurrentMonth} />
 
       <div className="expenses-view__content">
         {isLoading ? (
