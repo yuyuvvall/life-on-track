@@ -36,12 +36,13 @@ export function useExpensesByDateRange(start: string, end: string, purpose = 'Vi
 
 export function useCreateExpense() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: (data: CreateExpenseRequest) => expensesApi.create(data, 'Add expense'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['weeklySummary'] });
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
     },
   });
 }
@@ -124,12 +125,13 @@ export function useDeleteRecurringExpense() {
 
 export function useGenerateRecurringExpenses() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: () => recurringExpensesApi.generate('Generate recurring expenses'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['weeklySummary'] });
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
     },
   });
 }
