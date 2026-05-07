@@ -5,6 +5,9 @@ import type {
   RecurringExpense,
   Budget,
   UpsertBudgetRequest,
+  Tag,
+  CreateTagRequest,
+  UpdateTagRequest,
   Goal,
   GoalLog,
   GoalStats,
@@ -253,6 +256,35 @@ export const budgetsApi = {
 
   delete: (id: number, purpose?: string) =>
     request<void>(`/budgets/${id}`, { method: 'DELETE', purpose }),
+};
+
+// Tags API
+export const tagsApi = {
+  getAll: (includeArchived?: boolean, purpose?: string) =>
+    request<Tag[]>(
+      includeArchived ? '/tags?includeArchived=1' : '/tags',
+      { purpose },
+    ),
+
+  getById: (id: number, purpose?: string) =>
+    request<Tag>(`/tags/${id}`, { purpose }),
+
+  create: (data: CreateTagRequest, purpose?: string) =>
+    request<Tag>('/tags', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+
+  update: (id: number, data: UpdateTagRequest, purpose?: string) =>
+    request<Tag>(`/tags/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+
+  delete: (id: number, purpose?: string) =>
+    request<void>(`/tags/${id}`, { method: 'DELETE', purpose }),
 };
 
 // Goals API

@@ -33,6 +33,7 @@ export interface Expense {
   category: string;
   note: string | null;
   createdAt: string;
+  tagId: number | null;
 }
 
 export type RecurrenceType = 'weekly' | 'monthly';
@@ -47,6 +48,7 @@ export interface RecurringExpense {
   isActive: boolean;
   lastGeneratedDate: string | null;
   createdAt: string;
+  tagId: number | null;
 }
 
 export interface Budget {
@@ -61,6 +63,38 @@ export interface UpsertBudgetRequest {
   category: string;
   month: string;
   amount: number;
+}
+
+export interface Tag {
+  id: number;
+  name: string;
+  category: string;
+  amount: number;
+  note: string | null;
+  icon: string;
+  color: string;
+  isArchived: boolean;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreateTagRequest {
+  name: string;
+  category: string;
+  amount: number;
+  note?: string;
+  icon: string;
+  color: string;
+}
+
+export interface UpdateTagRequest {
+  name?: string;
+  category?: string;
+  amount?: number;
+  note?: string;
+  icon?: string;
+  color?: string;
+  isArchived?: boolean;
 }
 
 export type GoalType = 'reading' | 'frequency' | 'numeric';
@@ -155,6 +189,7 @@ export interface CreateExpenseRequest {
   category: string;
   note?: string;
   createdAt?: string;
+  tagId?: number | null;
 }
 
 export interface UpdateExpenseRequest {
@@ -162,6 +197,7 @@ export interface UpdateExpenseRequest {
   category?: string;
   note?: string;
   createdAt?: string;
+  tagId?: number | null;
 }
 
 export interface CreateRecurringExpenseRequest {
@@ -170,6 +206,7 @@ export interface CreateRecurringExpenseRequest {
   note?: string;
   recurrenceType: RecurrenceType;
   recurrenceDay: number;
+  tagId?: number | null;
 }
 
 export interface UpdateRecurringExpenseRequest {
@@ -179,6 +216,7 @@ export interface UpdateRecurringExpenseRequest {
   recurrenceType?: RecurrenceType;
   recurrenceDay?: number;
   isActive?: boolean;
+  tagId?: number | null;
 }
 
 export interface CreateGoalRequest {

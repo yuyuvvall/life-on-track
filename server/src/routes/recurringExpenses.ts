@@ -59,6 +59,9 @@ router.get('/', async (_req, res) => {
  *                 enum: [weekly, monthly]
  *               recurrenceDay:
  *                 type: integer
+ *               tagId:
+ *                 type: integer
+ *                 nullable: true
  *     responses:
  *       201:
  *         description: Recurring expense created
@@ -67,7 +70,7 @@ router.get('/', async (_req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { amount, category, note, recurrenceType, recurrenceDay } = req.body;
+    const { amount, category, note, recurrenceType, recurrenceDay, tagId } = req.body;
 
     if (amount === undefined || amount === null) {
       return res.status(400).json({ message: 'Amount is required' });
@@ -94,10 +97,26 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Monthly recurrence day must be 1-31' });
     }
 
+    let resolvedTagId: number | null = null;
+    if (tagId !== undefined && tagId !== null) {
+      if (!Number.isInteger(tagId)) {
+        return res.status(400).json({ message: 'tagId must be an integer' });
+      }
+      const tagLookup = await trackedExecute(
+        { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ?', args: [tagId] },
+        'validateTagOnRecurringCreate',
+      );
+      const tagRow = tagLookup.rows[0] as unknown as { id: number; is_archived: number } | undefined;
+      if (!tagRow || tagRow.is_archived === 1) {
+        return res.status(400).json({ message: 'Invalid or archived tagId' });
+      }
+      resolvedTagId = tagId;
+    }
+
     const result = await trackedExecute({
-      sql: `INSERT INTO recurring_expenses (amount, category, note, recurrence_type, recurrence_day) 
-            VALUES (?, ?, ?, ?, ?)`,
-      args: [amount, category, note || null, recurrenceType, recurrenceDay]
+      sql: `INSERT INTO recurring_expenses (amount, category, note, recurrence_type, recurrence_day, tag_id)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [amount, category, note || null, recurrenceType, recurrenceDay, resolvedTagId]
     }, 'createRecurringExpense');
 
     const recurringResult = await trackedExecute({
@@ -142,6 +161,9 @@ router.post('/', async (req, res) => {
  *                 type: integer
  *               isActive:
  *                 type: boolean
+ *               tagId:
+ *                 type: integer
+ *                 nullable: true
  *     responses:
  *       200:
  *         description: Recurring expense updated
@@ -151,7 +173,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { amount, category, note, recurrenceType, recurrenceDay, isActive } = req.body;
+    const { amount, category, note, recurrenceType, recurrenceDay, isActive, tagId } = req.body;
 
     // Build dynamic update query
     const updates: string[] = [];
@@ -180,6 +202,23 @@ router.put('/:id', async (req, res) => {
     if (isActive !== undefined) {
       updates.push('is_active = ?');
       args.push(isActive ? 1 : 0);
+    }
+    if (tagId !== undefined) {
+      if (tagId !== null) {
+        if (!Number.isInteger(tagId)) {
+          return res.status(400).json({ message: 'tagId must be an integer or null' });
+        }
+        const tagLookup = await trackedExecute(
+          { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ?', args: [tagId] },
+          'validateTagOnRecurringUpdate',
+        );
+        const tagRow = tagLookup.rows[0] as unknown as { id: number; is_archived: number } | undefined;
+        if (!tagRow || tagRow.is_archived === 1) {
+          return res.status(400).json({ message: 'Invalid or archived tagId' });
+        }
+      }
+      updates.push('tag_id = ?');
+      args.push(tagId);
     }
 
     if (updates.length === 0) {
@@ -297,9 +336,16 @@ router.post('/generate', async (_req, res) => {
       if (shouldGenerate && recurring.last_generated_date !== todayStr) {
         // Create the actual expense
         const expenseResult = await trackedExecute({
-          sql: 'INSERT INTO expenses (amount, category, note, created_at) VALUES (?, ?, ?, ?)',
-          args: [recurring.amount, recurring.category, recurring.note, today.toISOString()]
+          sql: 'INSERT INTO expenses (amount, category, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?)',
+          args: [recurring.amount, recurring.category, recurring.note, today.toISOString(), recurring.tag_id]
         }, 'createExpenseFromRecurring');
+
+        if (recurring.tag_id !== null) {
+          trackedExecute(
+            { sql: 'UPDATE expense_tags SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?', args: [recurring.tag_id] },
+            'updateTagLastUsedAt',
+          ).catch(() => {});
+        }
 
         // Update last_generated_date
         await trackedExecute({
