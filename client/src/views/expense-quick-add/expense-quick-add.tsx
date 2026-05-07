@@ -7,6 +7,7 @@ import KeypadButton from './keypad-button'
 import RecurringOptionsModal from './recurring-options-modal'
 import DatePickerModal from './date-picker-modal'
 import TagChipRow from '@/components/tag-chip-row'
+import TagManageModal from '@/components/tag-manage-modal'
 import './expense-quick-add.less'
 
 const CATEGORIES = [
@@ -49,6 +50,8 @@ const ExpenseQuickAdd = () => {
   const [tagId, setTagId] = useState<number | null>(null)
   const [selectedDate, setSelectedDate] = useState(() => parseInitialDate(searchParams.get('date')))
   const [showDatePicker, setShowDatePicker] = useState(false)
+
+  const [saveAsTagOpen, setSaveAsTagOpen] = useState(false)
 
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>('monthly')
@@ -297,6 +300,17 @@ const ExpenseQuickAdd = () => {
         />
       </div>
 
+      {!isEditMode && (
+        <button
+          type="button"
+          className="expense-quick-add__save-as-tag"
+          onClick={() => setSaveAsTagOpen(true)}
+          disabled={parseFloat(amount) <= 0}
+        >
+          💾 Save as tag
+        </button>
+      )}
+
       <div className="expense-quick-add__keypad">
         <div className="expense-quick-add__keypad-grid">
           <KeypadButton label="÷" onClick={() => {}} disabled variant="operator" />
@@ -365,6 +379,21 @@ const ExpenseQuickAdd = () => {
             setShowRecurringOptions(false)
           }}
           onCancel={() => setShowRecurringOptions(false)}
+        />
+      )}
+
+      {saveAsTagOpen && (
+        <TagManageModal
+          initialMode="create"
+          initialDraft={{
+            name: note || category,
+            category,
+            amount: parseFloat(amount) || 0,
+            note: note || undefined,
+            icon: selectedCat.icon,
+            color: selectedCat.color,
+          }}
+          onClose={() => setSaveAsTagOpen(false)}
         />
       )}
     </div>
