@@ -33,6 +33,7 @@ export interface ExpenseRow {
   category: string;
   note: string | null;
   created_at: string;
+  tag_id: number | null;
 }
 
 export interface RecurringExpenseRow {
@@ -45,6 +46,7 @@ export interface RecurringExpenseRow {
   is_active: number;
   last_generated_date: string | null;
   created_at: string;
+  tag_id: number | null;
 }
 
 export interface CategoryBudgetRow {
@@ -52,6 +54,19 @@ export interface CategoryBudgetRow {
   category: string;
   month: string;
   amount: number;
+  created_at: string;
+}
+
+export interface TagRow {
+  id: number;
+  name: string;
+  category: string;
+  amount: number;
+  note: string | null;
+  icon: string;
+  color: string;
+  is_archived: number;
+  last_used_at: string | null;
   created_at: string;
 }
 
@@ -115,6 +130,7 @@ export interface Expense {
   category: string;
   note: string | null;
   createdAt: string;
+  tagId: number | null;
 }
 
 export interface RecurringExpense {
@@ -127,6 +143,7 @@ export interface RecurringExpense {
   isActive: boolean;
   lastGeneratedDate: string | null;
   createdAt: string;
+  tagId: number | null;
 }
 
 export interface Budget {
@@ -134,6 +151,19 @@ export interface Budget {
   category: string;
   month: string;
   amount: number;
+  createdAt: string;
+}
+
+export interface Tag {
+  id: number;
+  name: string;
+  category: string;
+  amount: number;
+  note: string | null;
+  icon: string;
+  color: string;
+  isArchived: boolean;
+  lastUsedAt: string | null;
   createdAt: string;
 }
 
@@ -229,6 +259,7 @@ export function expenseRowToExpense(row: ExpenseRow): Expense {
     category: row.category,
     note: row.note,
     createdAt: row.created_at,
+    tagId: row.tag_id,
   };
 }
 
@@ -243,6 +274,7 @@ export function recurringExpenseRowToRecurringExpense(row: RecurringExpenseRow):
     isActive: Boolean(row.is_active),
     lastGeneratedDate: row.last_generated_date,
     createdAt: row.created_at,
+    tagId: row.tag_id,
   };
 }
 
@@ -252,6 +284,21 @@ export function budgetRowToBudget(row: CategoryBudgetRow): Budget {
     category: row.category,
     month: row.month,
     amount: row.amount,
+    createdAt: row.created_at,
+  };
+}
+
+export function tagRowToTag(row: TagRow): Tag {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    amount: row.amount,
+    note: row.note,
+    icon: row.icon,
+    color: row.color,
+    isArchived: Boolean(row.is_archived),
+    lastUsedAt: row.last_used_at,
     createdAt: row.created_at,
   };
 }
