@@ -120,7 +120,7 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { amount, category, note, createdAt } = req.body;
+    const { amount, category, note, createdAt, tagId } = req.body;
 
     if (amount === undefined || amount === null) {
       return res.status(400).json({ message: 'Amount is required' });
@@ -130,20 +130,44 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Category is required' });
     }
 
+    let resolvedTagId: number | null = null;
+    if (tagId !== undefined && tagId !== null) {
+      if (!Number.isInteger(tagId)) {
+        return res.status(400).json({ message: 'tagId must be an integer' });
+      }
+      const tagLookup = await trackedExecute(
+        { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ?', args: [tagId] },
+        'validateTagOnExpenseCreate',
+      );
+      const tagRow = tagLookup.rows[0] as unknown as { id: number; is_archived: number } | undefined;
+      if (!tagRow || tagRow.is_archived === 1) {
+        return res.status(400).json({ message: 'Invalid or archived tagId' });
+      }
+      resolvedTagId = tagId;
+    }
+
     // Use provided date or default to now
     const timestamp = createdAt || new Date().toISOString();
 
     const result = await trackedExecute({
-      sql: 'INSERT INTO expenses (amount, category, note, created_at) VALUES (?, ?, ?, ?)',
-      args: [amount, category, note || null, timestamp]
+      sql: 'INSERT INTO expenses (amount, category, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?)',
+      args: [amount, category, note || null, timestamp, resolvedTagId]
     }, 'createExpense');
+
+    if (resolvedTagId !== null) {
+      // Best-effort; never fail the request on this.
+      trackedExecute(
+        { sql: 'UPDATE expense_tags SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?', args: [resolvedTagId] },
+        'updateTagLastUsedAt',
+      ).catch(() => {});
+    }
 
     const expenseResult = await trackedExecute({
       sql: 'SELECT * FROM expenses WHERE id = ?',
       args: [Number(result.lastInsertRowid)]
     }, 'getCreatedExpense');
     const expense = expenseResult.rows[0] as unknown as ExpenseRow;
-    
+
     res.status(201).json(expenseRowToExpense(expense));
   } catch (err) {
     res.status(500).json({ message: (err as Error).message });
@@ -177,6 +201,9 @@ router.post('/', async (req, res) => {
  *               createdAt:
  *                 type: string
  *                 format: date-time
+ *               tagId:
+ *                 type: integer
+ *                 nullable: true
  *     responses:
  *       200:
  *         description: Expense updated
@@ -190,7 +217,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { amount, category, note, createdAt } = req.body;
+    const { amount, category, note, createdAt, tagId } = req.body;
 
     // Build dynamic update query
     const updates: string[] = [];
@@ -213,6 +240,26 @@ router.put('/:id', async (req, res) => {
       args.push(createdAt);
     }
 
+    let pendingTagBump: number | null = null;
+    if (tagId !== undefined) {
+      if (tagId !== null) {
+        if (!Number.isInteger(tagId)) {
+          return res.status(400).json({ message: 'tagId must be an integer or null' });
+        }
+        const tagLookup = await trackedExecute(
+          { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ?', args: [tagId] },
+          'validateTagOnExpenseUpdate',
+        );
+        const tagRow = tagLookup.rows[0] as unknown as { id: number; is_archived: number } | undefined;
+        if (!tagRow || tagRow.is_archived === 1) {
+          return res.status(400).json({ message: 'Invalid or archived tagId' });
+        }
+        pendingTagBump = tagId;
+      }
+      updates.push('tag_id = ?');
+      args.push(tagId);
+    }
+
     if (updates.length === 0) {
       return res.status(400).json({ message: 'No fields to update' });
     }
@@ -226,6 +273,14 @@ router.put('/:id', async (req, res) => {
 
     if (result.rowsAffected === 0) {
       return res.status(404).json({ message: 'Expense not found' });
+    }
+
+    if (pendingTagBump !== null) {
+      // Best-effort; never fail the request on this.
+      trackedExecute(
+        { sql: 'UPDATE expense_tags SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?', args: [pendingTagBump] },
+        'updateTagLastUsedAt',
+      ).catch(() => {});
     }
 
     const updatedResult = await trackedExecute({
