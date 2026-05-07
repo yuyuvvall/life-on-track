@@ -190,6 +190,29 @@ const ExpensesView = () => {
       .sort((a, b) => b.total - a.total)
   }, [expenses, budgets])
 
+  const tagBreakdownByCategory = useMemo(() => {
+    const result: Record<string, { tag: Tag; total: number; count: number }[]> = {}
+    const accum: Record<string, Map<number, { total: number; count: number }>> = {}
+    for (const e of expenses) {
+      if (e.tagId === null) continue
+      if (!accum[e.category]) accum[e.category] = new Map()
+      const bucket = accum[e.category]
+      const prev = bucket.get(e.tagId) ?? { total: 0, count: 0 }
+      bucket.set(e.tagId, { total: prev.total + e.amount, count: prev.count + 1 })
+    }
+    for (const [category, bucket] of Object.entries(accum)) {
+      const rows: { tag: Tag; total: number; count: number }[] = []
+      for (const [tagId, stats] of bucket) {
+        const tag = tagsById.get(tagId)
+        if (!tag) continue
+        rows.push({ tag, total: stats.total, count: stats.count })
+      }
+      rows.sort((a, b) => b.total - a.total)
+      result[category] = rows
+    }
+    return result
+  }, [expenses, tagsById])
+
   const totalSpent = useMemo(() => {
     return expenses.reduce((sum, e) => sum + e.amount, 0)
   }, [expenses])
@@ -398,6 +421,28 @@ const ExpensesView = () => {
                       </div>
                     </div>
                   </div>
+                  {(tagBreakdownByCategory[category]?.length ?? 0) > 0 && (
+                    <div className="expenses-view__category-tags">
+                      {tagBreakdownByCategory[category]!.map(({ tag, total, count }) => (
+                        <span
+                          key={tag.id}
+                          className="expenses-view__category-tag"
+                          style={{ borderColor: tag.color }}
+                        >
+                          <span
+                            className="expenses-view__category-tag-icon"
+                            style={{ backgroundColor: tag.color }}
+                          >
+                            {tag.icon}
+                          </span>
+                          <span className="expenses-view__category-tag-name">{tag.name}</span>
+                          <span className="expenses-view__category-tag-meta">
+                            ₪{total.toFixed(2)} · {count}×
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="expenses-view__progress-track">
                     {hasBudget && (
                       <div className={`expenses-view__progress-budget expenses-view__progress-budget--${mod(category)}`} />
