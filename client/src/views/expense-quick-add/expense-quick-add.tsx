@@ -6,6 +6,7 @@ import type { RecurrenceType } from '@/types'
 import KeypadButton from './keypad-button'
 import RecurringOptionsModal from './recurring-options-modal'
 import DatePickerModal from './date-picker-modal'
+import TagChipRow from '@/components/tag-chip-row'
 import './expense-quick-add.less'
 
 const CATEGORIES = [
@@ -45,6 +46,7 @@ const ExpenseQuickAdd = () => {
   const [amount, setAmount] = useState('0')
   const [category, setCategory] = useState<CategoryId>('Food')
   const [note, setNote] = useState('')
+  const [tagId, setTagId] = useState<number | null>(null)
   const [selectedDate, setSelectedDate] = useState(() => parseInitialDate(searchParams.get('date')))
   const [showDatePicker, setShowDatePicker] = useState(false)
 
@@ -59,6 +61,7 @@ const ExpenseQuickAdd = () => {
       setCategory(existingExpense.category as CategoryId)
       setNote(existingExpense.note || '')
       setSelectedDate(new Date(existingExpense.createdAt))
+      setTagId(existingExpense.tagId)
     }
   }, [existingExpense])
 
@@ -89,20 +92,39 @@ const ExpenseQuickAdd = () => {
 
     if (isRecurring && !isEditMode) {
       createRecurringExpense.mutate(
-        { amount: parsedAmount, category, note: note || undefined, recurrenceType, recurrenceDay },
+        {
+          amount: parsedAmount,
+          category,
+          note: note || undefined,
+          recurrenceType,
+          recurrenceDay,
+          tagId: tagId ?? undefined,
+        },
         { onSuccess: () => navigate(-1) }
       )
     } else if (isEditMode && expenseId) {
       updateExpense.mutate(
         {
           id: expenseId,
-          data: { amount: parsedAmount, category, note: note || undefined, createdAt: selectedDate.toISOString() },
+          data: {
+            amount: parsedAmount,
+            category,
+            note: note || undefined,
+            createdAt: selectedDate.toISOString(),
+            tagId: tagId,
+          },
         },
         { onSuccess: () => navigate(-1) }
       )
     } else {
       createExpense.mutate(
-        { amount: parsedAmount, category, note: note || undefined, createdAt: selectedDate.toISOString() },
+        {
+          amount: parsedAmount,
+          category,
+          note: note || undefined,
+          createdAt: selectedDate.toISOString(),
+          tagId: tagId ?? undefined,
+        },
         { onSuccess: () => navigate(-1) }
       )
     }
@@ -194,6 +216,21 @@ const ExpenseQuickAdd = () => {
           ))}
         </div>
       </div>
+
+      <TagChipRow
+        mode="prefill"
+        selectedTagId={tagId}
+        onSelect={(tag) => {
+          if (tag === null) {
+            setTagId(null)
+            return
+          }
+          setTagId(tag.id)
+          setAmount(String(tag.amount))
+          setCategory(tag.category as CategoryId)
+          setNote(tag.note ?? '')
+        }}
+      />
 
       <div className="expense-quick-add__banner">
         <div>
