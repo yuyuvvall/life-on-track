@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { trackedExecute } from '../db/index.js';
+import { trackedExecute, resolveCategoryId } from '../db/index.js';
 import { TagRow, tagRowToTag } from '../types.js';
 
 const router = Router();
@@ -97,11 +97,13 @@ router.post('/', async (req: Request, res: Response) => {
     if (typeof color !== 'string' || color.length === 0) {
       return res.status(400).json({ message: 'color is required' });
     }
+    const categoryId = await resolveCategoryId(category);
+
     const result = await trackedExecute(
       {
-        sql: `INSERT INTO expense_tags (name, category, amount, note, icon, color)
-              VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [name.trim(), category.trim(), amount, note ?? null, icon.trim(), color],
+        sql: `INSERT INTO expense_tags (name, category, category_id, amount, note, icon, color)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        args: [name.trim(), category.trim(), categoryId, amount, note ?? null, icon.trim(), color],
       },
       'createTag',
     );
@@ -150,6 +152,8 @@ router.put('/:id', async (req: Request, res: Response) => {
         return res.status(400).json({ message: 'category must be non-empty string' });
       }
       sets.push('category = ?'); args.push(category.trim());
+      const newCategoryId = await resolveCategoryId(category);
+      sets.push('category_id = ?'); args.push(newCategoryId);
     }
     if (amount !== undefined) {
       if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {

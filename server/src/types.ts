@@ -31,6 +31,7 @@ export interface ExpenseRow {
   id: number;
   amount: number;
   category: string;
+  category_id: number | null;
   note: string | null;
   created_at: string;
   tag_id: number | null;
@@ -40,6 +41,7 @@ export interface RecurringExpenseRow {
   id: number;
   amount: number;
   category: string;
+  category_id: number | null;
   note: string | null;
   recurrence_type: 'weekly' | 'monthly';
   recurrence_day: number;
@@ -52,6 +54,7 @@ export interface RecurringExpenseRow {
 export interface CategoryBudgetRow {
   id: number;
   category: string;
+  category_id: number | null;
   month: string;
   amount: number;
   created_at: string;
@@ -61,12 +64,24 @@ export interface TagRow {
   id: number;
   name: string;
   category: string;
+  category_id: number | null;
   amount: number;
   note: string | null;
   icon: string;
   color: string;
   is_archived: number;
   last_used_at: string | null;
+  created_at: string;
+}
+
+export interface CategoryRow {
+  id: number;
+  name: string;
+  icon: string;
+  color: string;
+  sort_order: number;
+  is_archived: number;
+  is_system: number;
   created_at: string;
 }
 
@@ -128,6 +143,7 @@ export interface Expense {
   id: number;
   amount: number;
   category: string;
+  categoryId: number | null;
   note: string | null;
   createdAt: string;
   tagId: number | null;
@@ -137,6 +153,7 @@ export interface RecurringExpense {
   id: number;
   amount: number;
   category: string;
+  categoryId: number | null;
   note: string | null;
   recurrenceType: 'weekly' | 'monthly';
   recurrenceDay: number;
@@ -149,6 +166,7 @@ export interface RecurringExpense {
 export interface Budget {
   id: number;
   category: string;
+  categoryId: number | null;
   month: string;
   amount: number;
   createdAt: string;
@@ -158,12 +176,24 @@ export interface Tag {
   id: number;
   name: string;
   category: string;
+  categoryId: number | null;
   amount: number;
   note: string | null;
   icon: string;
   color: string;
   isArchived: boolean;
   lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+  icon: string;
+  color: string;
+  sortOrder: number;
+  isArchived: boolean;
+  isSystem: boolean;
   createdAt: string;
 }
 
@@ -257,6 +287,7 @@ export function expenseRowToExpense(row: ExpenseRow): Expense {
     id: row.id,
     amount: row.amount,
     category: row.category,
+    categoryId: row.category_id,
     note: row.note,
     createdAt: row.created_at,
     tagId: row.tag_id,
@@ -268,6 +299,7 @@ export function recurringExpenseRowToRecurringExpense(row: RecurringExpenseRow):
     id: row.id,
     amount: row.amount,
     category: row.category,
+    categoryId: row.category_id,
     note: row.note,
     recurrenceType: row.recurrence_type,
     recurrenceDay: row.recurrence_day,
@@ -282,6 +314,7 @@ export function budgetRowToBudget(row: CategoryBudgetRow): Budget {
   return {
     id: row.id,
     category: row.category,
+    categoryId: row.category_id,
     month: row.month,
     amount: row.amount,
     createdAt: row.created_at,
@@ -293,12 +326,26 @@ export function tagRowToTag(row: TagRow): Tag {
     id: row.id,
     name: row.name,
     category: row.category,
+    categoryId: row.category_id,
     amount: row.amount,
     note: row.note,
     icon: row.icon,
     color: row.color,
     isArchived: Boolean(row.is_archived),
     lastUsedAt: row.last_used_at,
+    createdAt: row.created_at,
+  };
+}
+
+export function categoryRowToCategory(row: CategoryRow): Category {
+  return {
+    id: row.id,
+    name: row.name,
+    icon: row.icon,
+    color: row.color,
+    sortOrder: row.sort_order,
+    isArchived: Boolean(row.is_archived),
+    isSystem: Boolean(row.is_system),
     createdAt: row.created_at,
   };
 }

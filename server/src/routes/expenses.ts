@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { InValue } from '@libsql/client';
-import { trackedExecute } from '../db/index.js';
+import { trackedExecute, resolveCategoryId } from '../db/index.js';
 import type { ExpenseRow } from '../types.js';
 import { expenseRowToExpense } from '../types.js';
 
@@ -149,9 +149,11 @@ router.post('/', async (req, res) => {
     // Use provided date or default to now
     const timestamp = createdAt || new Date().toISOString();
 
+    const categoryId = await resolveCategoryId(category);
+
     const result = await trackedExecute({
-      sql: 'INSERT INTO expenses (amount, category, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?)',
-      args: [amount, category, note || null, timestamp, resolvedTagId]
+      sql: 'INSERT INTO expenses (amount, category, category_id, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?, ?)',
+      args: [amount, category, categoryId, note || null, timestamp, resolvedTagId]
     }, 'createExpense');
 
     if (resolvedTagId !== null) {
@@ -230,6 +232,9 @@ router.put('/:id', async (req, res) => {
     if (category !== undefined) {
       updates.push('category = ?');
       args.push(category);
+      const newCategoryId = await resolveCategoryId(category);
+      updates.push('category_id = ?');
+      args.push(newCategoryId);
     }
     if (note !== undefined) {
       updates.push('note = ?');

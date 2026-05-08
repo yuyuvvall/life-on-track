@@ -2,19 +2,21 @@ import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUIStore } from '@/store/uiStore'
 import { useCreateExpense } from '@/hooks'
+import { useCategories } from '@/hooks/useCategories'
 import { tasksApi } from '@/api/client'
 import { optimisticId } from '@/utils/optimisticId'
 import { showToast } from '@/store/toastStore'
-import { EXPENSE_CATEGORIES, type TaskCategory, type Task } from '@/types'
+import type { TaskCategory, Task } from '@/types'
 import './quick-add-modal.less'
 
 const QuickAddModal = () => {
   const { quickAdd, closeQuickAdd } = useUIStore()
   const queryClient = useQueryClient()
   const createExpense = useCreateExpense()
+  const { data: categories = [] } = useCategories()
 
   const [amount, setAmount] = useState('')
-  const [expenseCategory, setExpenseCategory] = useState<string>(EXPENSE_CATEGORIES[0])
+  const [expenseCategory, setExpenseCategory] = useState<string>('Food')
 
   const [taskTitle, setTaskTitle] = useState('')
   const [taskCategory, setTaskCategory] = useState<TaskCategory>('Personal')
@@ -25,14 +27,14 @@ const QuickAddModal = () => {
   useEffect(() => {
     if (!quickAdd.isOpen) {
       setAmount('')
-      setExpenseCategory(EXPENSE_CATEGORIES[0])
+      setExpenseCategory(categories[0]?.name ?? 'Food')
       setTaskTitle('')
       setTaskCategory('Personal')
       setTaskDeadline('')
       setSubtasks([])
       setNewSubtask('')
     }
-  }, [quickAdd.isOpen])
+  }, [quickAdd.isOpen, categories])
 
   const handleExpenseSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -174,16 +176,16 @@ const QuickAddModal = () => {
             <div>
               <label className="quick-add-modal__label">Category</label>
               <div className="quick-add-modal__category-list">
-                {EXPENSE_CATEGORIES.map((cat) => (
+                {categories.map((cat) => (
                   <button
-                    key={cat}
+                    key={cat.id}
                     type="button"
-                    onClick={() => setExpenseCategory(cat)}
+                    onClick={() => setExpenseCategory(cat.name)}
                     className={`quick-add-modal__category-btn${
-                      expenseCategory === cat ? ' quick-add-modal__category-btn--active' : ''
+                      expenseCategory === cat.name ? ' quick-add-modal__category-btn--active' : ''
                     }`}
                   >
-                    {cat}
+                    {cat.name}
                   </button>
                 ))}
               </div>

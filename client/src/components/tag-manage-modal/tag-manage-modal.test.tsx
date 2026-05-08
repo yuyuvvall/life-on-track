@@ -12,12 +12,16 @@ vi.mock('@/api/client', () => ({
     update: vi.fn(),
     delete: vi.fn(),
   },
+  categoriesApi: {
+    getAll: vi.fn().mockResolvedValue([]),
+  },
 }));
 
 const sampleTag: Tag = {
   id: 1,
   name: 'Parking',
   category: 'Transport',
+  categoryId: null,
   amount: 12,
   note: null,
   icon: '🅿️',

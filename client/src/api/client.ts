@@ -6,6 +6,7 @@ import type {
   Budget,
   UpsertBudgetRequest,
   Tag,
+  Category,
   CreateTagRequest,
   UpdateTagRequest,
   Goal,
@@ -256,6 +257,15 @@ export const budgetsApi = {
 
   delete: (id: number, purpose?: string) =>
     request<void>(`/budgets/${id}`, { method: 'DELETE', purpose }),
+};
+
+// Categories API
+export const categoriesApi = {
+  getAll: (includeArchived?: boolean, purpose?: string) =>
+    request<Category[]>(
+      includeArchived ? '/categories?includeArchived=1' : '/categories',
+      { purpose },
+    ),
 };
 
 // Tags API

@@ -1,18 +1,10 @@
 import { useState } from 'react';
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag } from '@/hooks/useTags';
-import type { CreateTagRequest, Tag } from '@/types';
+import { useCategories } from '@/hooks/useCategories';
+import type { Category, CreateTagRequest, Tag } from '@/types';
 import './tag-manage-modal.less';
 
-const CATEGORIES = [
-  { id: 'Food', icon: '🍴', color: '#f97316' },
-  { id: 'Groceries', icon: '🛒', color: '#3b82f6' },
-  { id: 'Transport', icon: '🚌', color: '#f59e0b' },
-  { id: 'Shopping', icon: '🛍️', color: '#ec4899' },
-  { id: 'Bills', icon: '📄', color: '#64748b' },
-  { id: 'Entertainment', icon: '🎮', color: '#a855f7' },
-  { id: 'Health', icon: '💊', color: '#10b981' },
-  { id: 'Other', icon: '📦', color: '#6b7280' },
-] as const;
+const FALLBACK_CATEGORY = { name: 'Other', icon: '📦', color: '#6b7280' } as const;
 
 export type TagManageModalProps = {
   initialMode?: 'list' | 'create' | 'edit';
@@ -30,9 +22,13 @@ type FormState = {
   color: string;
 };
 
-const draftToForm = (draft: Partial<CreateTagRequest> | undefined): FormState => {
-  const cat = draft?.category ?? 'Other';
-  const catEntry = CATEGORIES.find((c) => c.id === cat) ?? CATEGORIES[7];
+const draftToForm = (
+  draft: Partial<CreateTagRequest> | undefined,
+  categories: ReadonlyArray<Category>,
+): FormState => {
+  const cat = draft?.category ?? FALLBACK_CATEGORY.name;
+  const catEntry =
+    categories.find((c) => c.name.toLowerCase() === cat.toLowerCase()) ?? FALLBACK_CATEGORY;
   return {
     name: draft?.name ?? '',
     category: cat,
@@ -61,7 +57,8 @@ const TagManageModal = ({
   const [mode, setMode] = useState<'list' | 'create' | 'edit'>(initialMode);
   const [editingId, setEditingId] = useState<number | undefined>(initialEditId);
   const [showArchived, setShowArchived] = useState(false);
-  const [form, setForm] = useState<FormState>(() => draftToForm(initialDraft));
+  const { data: categories = [] } = useCategories();
+  const [form, setForm] = useState<FormState>(() => draftToForm(initialDraft, categories));
   const [error, setError] = useState<string | null>(null);
 
   const { data: tags } = useTags(showArchived);
@@ -69,12 +66,12 @@ const TagManageModal = ({
   const updateTag = useUpdateTag();
   const deleteTag = useDeleteTag();
 
-  const handleCategoryClick = (cat: (typeof CATEGORIES)[number]) => {
+  const handleCategoryClick = (cat: Category) => {
     setForm((f) => ({
       ...f,
-      category: cat.id,
-      icon: f.icon === '' || CATEGORIES.some((c) => c.icon === f.icon) ? cat.icon : f.icon,
-      color: f.color === '' || CATEGORIES.some((c) => c.color === f.color) ? cat.color : f.color,
+      category: cat.name,
+      icon: f.icon === '' || categories.some((c) => c.icon === f.icon) ? cat.icon : f.icon,
+      color: f.color === '' || categories.some((c) => c.color === f.color) ? cat.color : f.color,
     }));
   };
 
@@ -188,7 +185,7 @@ const TagManageModal = ({
               type="button"
               className="tag-manage-modal__new"
               onClick={() => {
-                setForm(draftToForm(undefined));
+                setForm(draftToForm(undefined, categories));
                 setEditingId(undefined);
                 setMode('create');
                 setError(null);
@@ -210,18 +207,18 @@ const TagManageModal = ({
               />
             </label>
             <div className="tag-manage-modal__cat-row">
-              {CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => handleCategoryClick(c)}
                   className={
-                    form.category === c.id
+                    form.category === c.name
                       ? 'tag-manage-modal__cat tag-manage-modal__cat--active'
                       : 'tag-manage-modal__cat'
                   }
-                  style={form.category === c.id ? { backgroundColor: c.color } : undefined}
-                  aria-label={c.id}
+                  style={form.category === c.name ? { backgroundColor: c.color } : undefined}
+                  aria-label={c.name}
                 >
                   {c.icon}
                 </button>

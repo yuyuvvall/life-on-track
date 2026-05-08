@@ -31,6 +31,7 @@ export interface Expense {
   id: number;
   amount: number;
   category: string;
+  categoryId: number | null;
   note: string | null;
   createdAt: string;
   tagId: number | null;
@@ -42,6 +43,7 @@ export interface RecurringExpense {
   id: number;
   amount: number;
   category: string;
+  categoryId: number | null;
   note: string | null;
   recurrenceType: RecurrenceType;
   recurrenceDay: number;
@@ -54,8 +56,20 @@ export interface RecurringExpense {
 export interface Budget {
   id: number;
   category: string;
+  categoryId: number | null;
   month: string;   // 'YYYY-MM'
   amount: number;
+  createdAt: string;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+  icon: string;
+  color: string;
+  sortOrder: number;
+  isArchived: boolean;
+  isSystem: boolean;
   createdAt: string;
 }
 
@@ -69,6 +83,7 @@ export interface Tag {
   id: number;
   name: string;
   category: string;
+  categoryId: number | null;
   amount: number;
   note: string | null;
   icon: string;
@@ -255,16 +270,4 @@ export interface UpdateGoalLogRequest {
 
 // UI State types
 export type TaskCategory = 'Work' | 'Admin' | 'Personal';
-
-export const EXPENSE_CATEGORIES = [
-  'Food',
-  'Transport',
-  'Entertainment',
-  'Shopping',
-  'Bills',
-  'Health',
-  'Other'
-] as const;
-
-export type ExpenseCategory = typeof EXPENSE_CATEGORIES[number];
 

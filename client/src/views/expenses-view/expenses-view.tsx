@@ -16,30 +16,13 @@ import { BudgetEditModal, BudgetsBulkModal } from '@/components'
 import type { BudgetBulkChange, BudgetBulkEntry } from '@/components'
 import TagChipRow from '@/components/tag-chip-row'
 import { useTags } from '@/hooks/useTags'
-import type { Expense, Tag } from '@/types'
+import { useCategories } from '@/hooks/useCategories'
+import type { Category, Expense, Tag } from '@/types'
 import './expenses-view.less'
 
-const CATEGORY_ICONS: Record<string, string> = {
-  'Food': '🍴',
-  'Groceries': '🛒',
-  'Transport': '🚌',
-  'Shopping': '🛍️',
-  'Bills': '📄',
-  'Entertainment': '🎮',
-  'Health': '💊',
-  'Other': '📦',
-}
+const FALLBACK_ICON = '📦'
 
-const CATEGORY_MODIFIER: Record<string, string> = {
-  'Food': 'food',
-  'Groceries': 'groceries',
-  'Transport': 'transport',
-  'Shopping': 'shopping',
-  'Bills': 'bills',
-  'Entertainment': 'entertainment',
-  'Health': 'health',
-  'Other': 'other',
-}
+const categoryNameToModifier = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 
 type ViewMode = 'timeline' | 'category'
 
@@ -82,11 +65,18 @@ const ExpensesView = () => {
   const { data: expenses = [], isLoading } = useExpensesByDateRange(startDate, endDate)
   const { data: budgets = [] } = useBudgetsByMonth(monthKey)
   const { data: allTags = [] } = useTags(true)
+  const { data: allCategories = [] } = useCategories(true)
   const tagsById = useMemo(() => {
     const map = new Map<number, Tag>()
     for (const t of allTags) map.set(t.id, t)
     return map
   }, [allTags])
+  const categoriesByName = useMemo(() => {
+    const map = new Map<string, Category>()
+    for (const c of allCategories) map.set(c.name.toLowerCase(), c)
+    return map
+  }, [allCategories])
+  const lookupCategory = (name: string): Category | undefined => categoriesByName.get(name.toLowerCase())
   const upsertBudget = useUpsertBudget()
   const deleteBudget = useDeleteBudget(monthKey)
   const changeBudgetFromNow = useChangeBudgetFromNow()
@@ -250,7 +240,7 @@ const ExpensesView = () => {
     })
   }
 
-  const mod = (category: string) => CATEGORY_MODIFIER[category] || 'other'
+  const mod = (category: string) => categoryNameToModifier(category) || 'other'
 
   return (
     <div className="expenses-view">
@@ -326,7 +316,7 @@ const ExpensesView = () => {
                     className={`expenses-view__expense-card expenses-view__expense-card--${mod(expense.category)}`}
                   >
                     <div className="expenses-view__expense-icon">
-                      {CATEGORY_ICONS[expense.category] || '📦'}
+                      {lookupCategory(expense.category)?.icon ?? FALLBACK_ICON}
                     </div>
                     <div className="expenses-view__expense-detail">
                       <p className="expenses-view__expense-category">{expense.category}</p>
@@ -406,7 +396,7 @@ const ExpensesView = () => {
                 <div key={category} className="expenses-view__category-card">
                   <div className="expenses-view__category-header">
                     <div className={`expenses-view__category-icon expenses-view__category-icon--${mod(category)}`}>
-                      {CATEGORY_ICONS[category] || '📦'}
+                      {lookupCategory(category)?.icon ?? FALLBACK_ICON}
                     </div>
                     <div className="expenses-view__category-info">
                       <div className="expenses-view__category-row">

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { InValue } from '@libsql/client';
-import { trackedExecute } from '../db/index.js';
+import { trackedExecute, resolveCategoryId } from '../db/index.js';
 import type { RecurringExpenseRow, ExpenseRow } from '../types.js';
 import { recurringExpenseRowToRecurringExpense, expenseRowToExpense } from '../types.js';
 
@@ -113,10 +113,12 @@ router.post('/', async (req, res) => {
       resolvedTagId = tagId;
     }
 
+    const categoryId = await resolveCategoryId(category);
+
     const result = await trackedExecute({
-      sql: `INSERT INTO recurring_expenses (amount, category, note, recurrence_type, recurrence_day, tag_id)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [amount, category, note || null, recurrenceType, recurrenceDay, resolvedTagId]
+      sql: `INSERT INTO recurring_expenses (amount, category, category_id, note, recurrence_type, recurrence_day, tag_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [amount, category, categoryId, note || null, recurrenceType, recurrenceDay, resolvedTagId]
     }, 'createRecurringExpense');
 
     const recurringResult = await trackedExecute({
@@ -186,6 +188,9 @@ router.put('/:id', async (req, res) => {
     if (category !== undefined) {
       updates.push('category = ?');
       args.push(category);
+      const newCategoryId = await resolveCategoryId(category);
+      updates.push('category_id = ?');
+      args.push(newCategoryId);
     }
     if (note !== undefined) {
       updates.push('note = ?');
@@ -334,10 +339,10 @@ router.post('/generate', async (_req, res) => {
 
       // Only generate if not already generated today
       if (shouldGenerate && recurring.last_generated_date !== todayStr) {
-        // Create the actual expense
+        // Create the actual expense (carry category_id forward)
         const expenseResult = await trackedExecute({
-          sql: 'INSERT INTO expenses (amount, category, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?)',
-          args: [recurring.amount, recurring.category, recurring.note, today.toISOString(), recurring.tag_id]
+          sql: 'INSERT INTO expenses (amount, category, category_id, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?, ?)',
+          args: [recurring.amount, recurring.category, recurring.category_id, recurring.note, today.toISOString(), recurring.tag_id]
         }, 'createExpenseFromRecurring');
 
         if (recurring.tag_id !== null) {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCreateExpense, useUpdateExpense, useExpense, useCreateRecurringExpense } from '@/hooks'
+import { useCategories } from '@/hooks/useCategories'
 import { WEEK_DAY_NAMES } from '@/utils/dateConstants'
 import type { RecurrenceType } from '@/types'
 import KeypadButton from './keypad-button'
@@ -9,19 +10,6 @@ import DatePickerModal from './date-picker-modal'
 import TagChipRow from '@/components/tag-chip-row'
 import TagManageModal from '@/components/tag-manage-modal'
 import './expense-quick-add.less'
-
-const CATEGORIES = [
-  { id: 'Food', icon: '🍴', color: '#f97316' },
-  { id: 'Groceries', icon: '🛒', color: '#3b82f6' },
-  { id: 'Transport', icon: '🚌', color: '#f59e0b' },
-  { id: 'Shopping', icon: '🛍️', color: '#ec4899' },
-  { id: 'Bills', icon: '📄', color: '#64748b' },
-  { id: 'Entertainment', icon: '🎮', color: '#a855f7' },
-  { id: 'Health', icon: '💊', color: '#10b981' },
-  { id: 'Other', icon: '📦', color: '#6b7280' },
-] as const
-
-type CategoryId = typeof CATEGORIES[number]['id']
 
 const parseInitialDate = (dateParam: string | null): Date => {
   if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return new Date()
@@ -43,9 +31,10 @@ const ExpenseQuickAdd = () => {
   const updateExpense = useUpdateExpense()
   const createRecurringExpense = useCreateRecurringExpense()
   const { data: existingExpense, isLoading: isLoadingExpense } = useExpense(expenseId)
+  const { data: categories = [] } = useCategories()
 
   const [amount, setAmount] = useState('0')
-  const [category, setCategory] = useState<CategoryId>('Food')
+  const [category, setCategory] = useState<string>('Food')
   const [note, setNote] = useState('')
   const [tagId, setTagId] = useState<number | null>(null)
   const [selectedDate, setSelectedDate] = useState(() => parseInitialDate(searchParams.get('date')))
@@ -61,14 +50,21 @@ const ExpenseQuickAdd = () => {
   useEffect(() => {
     if (existingExpense) {
       setAmount(existingExpense.amount.toString())
-      setCategory(existingExpense.category as CategoryId)
+      setCategory(existingExpense.category)
       setNote(existingExpense.note || '')
       setSelectedDate(new Date(existingExpense.createdAt))
       setTagId(existingExpense.tagId)
     }
   }, [existingExpense])
 
-  const selectedCat = CATEGORIES.find(c => c.id === category)!
+  // Once categories load, ensure selected category exists in the list (first non-archived).
+  useEffect(() => {
+    if (categories.length === 0) return
+    if (existingExpense) return
+    const exists = categories.some((c) => c.name === category)
+    if (!exists) setCategory(categories[0].name)
+  }, [categories, existingExpense, category])
+
   const isPending = createExpense.isPending || updateExpense.isPending || createRecurringExpense.isPending
 
   const handleKeyPress = (key: string) => {
@@ -197,28 +193,28 @@ const ExpenseQuickAdd = () => {
 
       <div className="expense-quick-add__categories">
         <div className="expense-quick-add__category-scroll">
-          {CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => setCategory(cat.id)}
+              onClick={() => setCategory(cat.name)}
               className={`expense-quick-add__category-btn${
-                category === cat.id ? ' expense-quick-add__category-btn--selected' : ''
+                category === cat.name ? ' expense-quick-add__category-btn--selected' : ''
               }`}
             >
               <div
                 className={`expense-quick-add__category-circle${
-                  category === cat.id ? ' expense-quick-add__category-circle--active' : ''
+                  category === cat.name ? ' expense-quick-add__category-circle--active' : ''
                 }`}
-                style={category === cat.id ? { backgroundColor: cat.color } : undefined}
+                style={category === cat.name ? { backgroundColor: cat.color } : undefined}
               >
                 {cat.icon}
               </div>
               <span
                 className={`expense-quick-add__category-label${
-                  category === cat.id ? ' expense-quick-add__category-label--active' : ''
+                  category === cat.name ? ' expense-quick-add__category-label--active' : ''
                 }`}
               >
-                {cat.id}
+                {cat.name}
               </span>
             </button>
           ))}
@@ -235,7 +231,7 @@ const ExpenseQuickAdd = () => {
           }
           setTagId(tag.id)
           setAmount(String(tag.amount))
-          setCategory(tag.category as CategoryId)
+          setCategory(tag.category)
           setNote(tag.note ?? '')
         }}
       />
@@ -344,20 +340,23 @@ const ExpenseQuickAdd = () => {
         />
       )}
 
-      {saveAsTagOpen && (
-        <TagManageModal
-          initialMode="create"
-          initialDraft={{
-            name: note || category,
-            category,
-            amount: parseFloat(amount) || 0,
-            note: note || undefined,
-            icon: selectedCat.icon,
-            color: selectedCat.color,
-          }}
-          onClose={() => setSaveAsTagOpen(false)}
-        />
-      )}
+      {saveAsTagOpen && (() => {
+        const selectedCat = categories.find((c) => c.name === category)
+        return (
+          <TagManageModal
+            initialMode="create"
+            initialDraft={{
+              name: note || category,
+              category,
+              amount: parseFloat(amount) || 0,
+              note: note || undefined,
+              icon: selectedCat?.icon ?? '📦',
+              color: selectedCat?.color ?? '#6b7280',
+            }}
+            onClose={() => setSaveAsTagOpen(false)}
+          />
+        )
+      })()}
     </div>
   )
 }
