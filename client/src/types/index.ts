@@ -73,6 +73,30 @@ export interface Category {
   createdAt: string;
 }
 
+export interface CategoryDependents {
+  activeRecurring: number;
+  activeBudgets: number;
+  expensesLast30Days: number;
+}
+
+export interface CategoryWithDependents extends Category {
+  dependents: CategoryDependents;
+}
+
+export interface CreateCategoryRequest {
+  name: string;
+  icon: string;
+  color: string;
+}
+
+export interface UpdateCategoryRequest {
+  name?: string;
+  icon?: string;
+  color?: string;
+  sortOrder?: number;
+  isArchived?: boolean;
+}
+
 export interface UpsertBudgetRequest {
   category: string;
   month: string;

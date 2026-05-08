@@ -7,6 +7,9 @@ import type {
   UpsertBudgetRequest,
   Tag,
   Category,
+  CategoryWithDependents,
+  CreateCategoryRequest,
+  UpdateCategoryRequest,
   CreateTagRequest,
   UpdateTagRequest,
   Goal,
@@ -266,6 +269,26 @@ export const categoriesApi = {
       includeArchived ? '/categories?includeArchived=1' : '/categories',
       { purpose },
     ),
+
+  getById: (id: number, purpose?: string) =>
+    request<CategoryWithDependents>(`/categories/${id}`, { purpose }),
+
+  create: (data: CreateCategoryRequest, purpose?: string) =>
+    request<Category>('/categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+
+  update: (id: number, data: UpdateCategoryRequest, purpose?: string) =>
+    request<Category>(`/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+
+  delete: (id: number, purpose?: string) =>
+    request<void>(`/categories/${id}`, { method: 'DELETE', purpose }),
 };
 
 // Tags API
