@@ -19,7 +19,12 @@ const router = Router();
 router.get('/', async (_req, res) => {
   try {
     const result = await trackedExecute(
-      'SELECT * FROM recurring_expenses ORDER BY created_at DESC',
+      `SELECT recurring_expenses.id, recurring_expenses.amount, recurring_expenses.category_id,
+              recurring_expenses.note, recurring_expenses.recurrence_type, recurring_expenses.recurrence_day,
+              recurring_expenses.is_active, recurring_expenses.last_generated_date,
+              recurring_expenses.created_at, recurring_expenses.tag_id, c.name AS category
+       FROM recurring_expenses LEFT JOIN categories c ON c.id = recurring_expenses.category_id
+       ORDER BY recurring_expenses.created_at DESC`,
       'getAllRecurringExpenses'
     );
 
@@ -116,13 +121,18 @@ router.post('/', async (req, res) => {
     const categoryId = await resolveCategoryId(category);
 
     const result = await trackedExecute({
-      sql: `INSERT INTO recurring_expenses (amount, category, category_id, note, recurrence_type, recurrence_day, tag_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      args: [amount, category, categoryId, note || null, recurrenceType, recurrenceDay, resolvedTagId]
+      sql: `INSERT INTO recurring_expenses (amount, category_id, note, recurrence_type, recurrence_day, tag_id)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [amount, categoryId, note || null, recurrenceType, recurrenceDay, resolvedTagId]
     }, 'createRecurringExpense');
 
     const recurringResult = await trackedExecute({
-      sql: 'SELECT * FROM recurring_expenses WHERE id = ?',
+      sql: `SELECT recurring_expenses.id, recurring_expenses.amount, recurring_expenses.category_id,
+                   recurring_expenses.note, recurring_expenses.recurrence_type, recurring_expenses.recurrence_day,
+                   recurring_expenses.is_active, recurring_expenses.last_generated_date,
+                   recurring_expenses.created_at, recurring_expenses.tag_id, c.name AS category
+            FROM recurring_expenses LEFT JOIN categories c ON c.id = recurring_expenses.category_id
+            WHERE recurring_expenses.id = ?`,
       args: [Number(result.lastInsertRowid)]
     }, 'getCreatedRecurringExpense');
     
@@ -186,8 +196,6 @@ router.put('/:id', async (req, res) => {
       args.push(amount);
     }
     if (category !== undefined) {
-      updates.push('category = ?');
-      args.push(category);
       const newCategoryId = await resolveCategoryId(category);
       updates.push('category_id = ?');
       args.push(newCategoryId);
@@ -242,7 +250,12 @@ router.put('/:id', async (req, res) => {
     }
 
     const updatedResult = await trackedExecute({
-      sql: 'SELECT * FROM recurring_expenses WHERE id = ?',
+      sql: `SELECT recurring_expenses.id, recurring_expenses.amount, recurring_expenses.category_id,
+                   recurring_expenses.note, recurring_expenses.recurrence_type, recurring_expenses.recurrence_day,
+                   recurring_expenses.is_active, recurring_expenses.last_generated_date,
+                   recurring_expenses.created_at, recurring_expenses.tag_id, c.name AS category
+            FROM recurring_expenses LEFT JOIN categories c ON c.id = recurring_expenses.category_id
+            WHERE recurring_expenses.id = ?`,
       args: [id]
     }, 'getUpdatedRecurringExpense');
 
@@ -317,7 +330,12 @@ router.post('/generate', async (_req, res) => {
 
     // Get all active recurring expenses
     const result = await trackedExecute(
-      'SELECT * FROM recurring_expenses WHERE is_active = 1',
+      `SELECT recurring_expenses.id, recurring_expenses.amount, recurring_expenses.category_id,
+              recurring_expenses.note, recurring_expenses.recurrence_type, recurring_expenses.recurrence_day,
+              recurring_expenses.is_active, recurring_expenses.last_generated_date,
+              recurring_expenses.created_at, recurring_expenses.tag_id, c.name AS category
+       FROM recurring_expenses LEFT JOIN categories c ON c.id = recurring_expenses.category_id
+       WHERE recurring_expenses.is_active = 1`,
       'getActiveRecurringExpenses'
     );
 
@@ -341,8 +359,8 @@ router.post('/generate', async (_req, res) => {
       if (shouldGenerate && recurring.last_generated_date !== todayStr) {
         // Create the actual expense (carry category_id forward)
         const expenseResult = await trackedExecute({
-          sql: 'INSERT INTO expenses (amount, category, category_id, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?, ?)',
-          args: [recurring.amount, recurring.category, recurring.category_id, recurring.note, today.toISOString(), recurring.tag_id]
+          sql: 'INSERT INTO expenses (amount, category_id, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?)',
+          args: [recurring.amount, recurring.category_id, recurring.note, today.toISOString(), recurring.tag_id]
         }, 'createExpenseFromRecurring');
 
         if (recurring.tag_id !== null) {
@@ -360,7 +378,10 @@ router.post('/generate', async (_req, res) => {
 
         // Fetch the created expense
         const createdExpense = await trackedExecute({
-          sql: 'SELECT * FROM expenses WHERE id = ?',
+          sql: `SELECT expenses.id, expenses.amount, expenses.category_id, expenses.note,
+                       expenses.created_at, expenses.tag_id, c.name AS category
+                FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
+                WHERE expenses.id = ?`,
           args: [Number(expenseResult.lastInsertRowid)]
         }, 'getGeneratedExpense');
 

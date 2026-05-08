@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS work_logs (
 CREATE TABLE IF NOT EXISTS expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     amount REAL NOT NULL,
-    category TEXT NOT NULL,
+    category_id INTEGER REFERENCES categories(id),
     note TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS expenses (
 CREATE TABLE IF NOT EXISTS recurring_expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     amount REAL NOT NULL,
-    category TEXT NOT NULL,
+    category_id INTEGER REFERENCES categories(id),
     note TEXT,
     recurrence_type TEXT NOT NULL CHECK (recurrence_type IN ('weekly', 'monthly')),
     recurrence_day INTEGER NOT NULL,
@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS category_budgets (
 CREATE TABLE IF NOT EXISTS expense_tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    category TEXT NOT NULL,
+    category_id INTEGER REFERENCES categories(id),
     amount REAL NOT NULL CHECK (amount >= 0),
     note TEXT,
     icon TEXT NOT NULL,
@@ -272,41 +272,13 @@ async function seedAndBackfillCategories() {
   }
 
   // Step 2 + 3: back-fill category_id; auto-create unknown categories.
-  // Loop until no more rows have NULL category_id (handles freshly created categories).
+  // Each table is wrapped in try/catch because the legacy `category` text
+  // column may already have been dropped on this DB. After the first
+  // successful run, every row has `category_id` and the column drop in the
+  // ALTER block below leaves nothing for the back-fill to do.
   for (const table of TABLES_WITH_CATEGORY) {
-    // First pass: fill from existing categories (case-insensitive name match)
-    await db.execute(`
-      UPDATE ${table}
-         SET category_id = (
-           SELECT id FROM categories
-            WHERE LOWER(name) = LOWER(${table}.category)
-            LIMIT 1
-         )
-       WHERE category_id IS NULL
-    `);
-
-    // Find any remaining unknown category strings and create rows for them.
-    const unknown = await db.execute({
-      sql: `SELECT DISTINCT category FROM ${table} WHERE category_id IS NULL`,
-      args: [],
-    });
-    const unknownNames = unknown.rows
-      .map((r) => (r as unknown as { category: string }).category)
-      .filter((n): n is string => typeof n === 'string' && n.trim().length > 0);
-
-    if (unknownNames.length > 0) {
-      const maxResult = await db.execute('SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories');
-      let nextOrder = Number((maxResult.rows[0] as unknown as { m: number }).m) + 1;
-      for (const name of unknownNames) {
-        const color = FALLBACK_PALETTE[(nextOrder - 1) % FALLBACK_PALETTE.length];
-        await db.execute({
-          sql: 'INSERT OR IGNORE INTO categories (name, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, 0)',
-          args: [name, '📦', color, nextOrder],
-        });
-        nextOrder += 1;
-      }
-
-      // Second pass to back-fill the rows we just created categories for.
+    try {
+      // First pass: fill from existing categories (case-insensitive name match)
       await db.execute(`
         UPDATE ${table}
            SET category_id = (
@@ -316,10 +288,56 @@ async function seedAndBackfillCategories() {
            )
          WHERE category_id IS NULL
       `);
+
+      // Find any remaining unknown category strings and create rows for them.
+      const unknown = await db.execute({
+        sql: `SELECT DISTINCT category FROM ${table} WHERE category_id IS NULL`,
+        args: [],
+      });
+      const unknownNames = unknown.rows
+        .map((r) => (r as unknown as { category: string }).category)
+        .filter((n): n is string => typeof n === 'string' && n.trim().length > 0);
+
+      if (unknownNames.length > 0) {
+        const maxResult = await db.execute('SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories');
+        let nextOrder = Number((maxResult.rows[0] as unknown as { m: number }).m) + 1;
+        for (const name of unknownNames) {
+          const color = FALLBACK_PALETTE[(nextOrder - 1) % FALLBACK_PALETTE.length];
+          await db.execute({
+            sql: 'INSERT OR IGNORE INTO categories (name, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, 0)',
+            args: [name, '📦', color, nextOrder],
+          });
+          nextOrder += 1;
+        }
+
+        // Second pass to back-fill the rows we just created categories for.
+        await db.execute(`
+          UPDATE ${table}
+             SET category_id = (
+               SELECT id FROM categories
+                WHERE LOWER(name) = LOWER(${table}.category)
+                LIMIT 1
+             )
+           WHERE category_id IS NULL
+        `);
+      }
+    } catch {
+      // Column already dropped — back-fill no longer needed for this table.
     }
   }
 
   console.log('[Database] Categories seeded and back-filled');
+
+  // Phase 4: drop the legacy `category` text columns now that:
+  //   - every row has a non-null category_id (back-fill above),
+  //   - every reader JOINs through categories, and
+  //   - every writer sets category_id only.
+  // category_budgets keeps its `category` column because it is part of a
+  // UNIQUE(category, month) constraint that would require a table rebuild
+  // to remove. That's a separate cleanup.
+  try { await db.execute('ALTER TABLE expenses DROP COLUMN category'); console.log('[Database] Dropped legacy expenses.category column'); } catch {}
+  try { await db.execute('ALTER TABLE recurring_expenses DROP COLUMN category'); console.log('[Database] Dropped legacy recurring_expenses.category column'); } catch {}
+  try { await db.execute('ALTER TABLE expense_tags DROP COLUMN category'); console.log('[Database] Dropped legacy expense_tags.category column'); } catch {}
 }
 
 /**
