@@ -37,17 +37,38 @@ const router = Router();
  */
 router.get('/', async (req, res) => {
   try {
-    const { start, end } = req.query;
+    const { start, end, categoryId } = req.query;
 
-    let result;
-    if (start && end) {
-      result = await trackedExecute({
-        sql: 'SELECT * FROM expenses WHERE DATE(created_at) BETWEEN ? AND ? ORDER BY created_at DESC',
-        args: [start as string, end as string]
-      }, 'getExpensesByDateRange');
-    } else {
-      result = await trackedExecute('SELECT * FROM expenses ORDER BY created_at DESC', 'getAllExpenses');
+    let parsedCategoryId: number | null = null;
+    if (categoryId !== undefined) {
+      const n = Number(categoryId);
+      if (!Number.isInteger(n) || n <= 0) {
+        return res.status(400).json({ message: 'categoryId must be a positive integer' });
+      }
+      parsedCategoryId = n;
     }
+
+    const where: string[] = [];
+    const args: InValue[] = [];
+    if (start && end) {
+      where.push('DATE(created_at) BETWEEN ? AND ?');
+      args.push(start as string, end as string);
+    }
+    if (parsedCategoryId !== null) {
+      where.push('category_id = ?');
+      args.push(parsedCategoryId);
+    }
+
+    const sql =
+      'SELECT expenses.id, expenses.amount, expenses.category_id, expenses.note, expenses.created_at, expenses.tag_id, c.name AS category ' +
+      'FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id' +
+      (where.length ? ` WHERE ${where.map((w) => w.replace(/category_id/g, 'expenses.category_id').replace(/created_at/g, 'expenses.created_at')).join(' AND ')}` : '') +
+      ' ORDER BY expenses.created_at DESC';
+
+    const result = await trackedExecute(
+      args.length ? { sql, args } : sql,
+      parsedCategoryId !== null ? 'getExpensesFiltered' : (start && end ? 'getExpensesByDateRange' : 'getAllExpenses'),
+    );
 
     const expenses = result.rows as unknown as ExpenseRow[];
     res.json(expenses.map(expenseRowToExpense));
@@ -81,7 +102,10 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const result = await trackedExecute({
-      sql: 'SELECT * FROM expenses WHERE id = ?',
+      sql: `SELECT expenses.id, expenses.amount, expenses.category_id, expenses.note,
+                   expenses.created_at, expenses.tag_id, c.name AS category
+            FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
+            WHERE expenses.id = ?`,
       args: [req.params.id]
     }, 'getExpenseById');
 
@@ -152,8 +176,8 @@ router.post('/', async (req, res) => {
     const categoryId = await resolveCategoryId(category);
 
     const result = await trackedExecute({
-      sql: 'INSERT INTO expenses (amount, category, category_id, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?, ?)',
-      args: [amount, category, categoryId, note || null, timestamp, resolvedTagId]
+      sql: 'INSERT INTO expenses (amount, category_id, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?)',
+      args: [amount, categoryId, note || null, timestamp, resolvedTagId]
     }, 'createExpense');
 
     if (resolvedTagId !== null) {
@@ -165,7 +189,10 @@ router.post('/', async (req, res) => {
     }
 
     const expenseResult = await trackedExecute({
-      sql: 'SELECT * FROM expenses WHERE id = ?',
+      sql: `SELECT expenses.id, expenses.amount, expenses.category_id, expenses.note,
+                   expenses.created_at, expenses.tag_id, c.name AS category
+            FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
+            WHERE expenses.id = ?`,
       args: [Number(result.lastInsertRowid)]
     }, 'getCreatedExpense');
     const expense = expenseResult.rows[0] as unknown as ExpenseRow;
@@ -230,8 +257,6 @@ router.put('/:id', async (req, res) => {
       args.push(amount);
     }
     if (category !== undefined) {
-      updates.push('category = ?');
-      args.push(category);
       const newCategoryId = await resolveCategoryId(category);
       updates.push('category_id = ?');
       args.push(newCategoryId);
@@ -289,7 +314,10 @@ router.put('/:id', async (req, res) => {
     }
 
     const updatedResult = await trackedExecute({
-      sql: 'SELECT * FROM expenses WHERE id = ?',
+      sql: `SELECT expenses.id, expenses.amount, expenses.category_id, expenses.note,
+                   expenses.created_at, expenses.tag_id, c.name AS category
+            FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
+            WHERE expenses.id = ?`,
       args: [id]
     }, 'getUpdatedExpense');
 

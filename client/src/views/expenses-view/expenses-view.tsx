@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   useExpensesByDateRange,
   useDeleteExpense,
@@ -15,14 +15,13 @@ import { showToast } from '@/store/toastStore'
 import { BudgetEditModal, BudgetsBulkModal } from '@/components'
 import type { BudgetBulkChange, BudgetBulkEntry } from '@/components'
 import TagChipRow from '@/components/tag-chip-row'
+import CategoryManageModal from '@/components/category-manage-modal/category-manage-modal'
 import { useTags } from '@/hooks/useTags'
 import { useCategories } from '@/hooks/useCategories'
 import type { Category, Expense, Tag } from '@/types'
 import './expenses-view.less'
 
 const FALLBACK_ICON = '📦'
-
-const categoryNameToModifier = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 
 type ViewMode = 'timeline' | 'category'
 
@@ -35,9 +34,16 @@ const shiftMonth = ({ year, month }: SelectedMonth, delta: number): SelectedMont
 
 const ExpensesView = () => {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const deleteExpense = useDeleteExpense()
   const createExpense = useCreateExpense()
   const generateRecurring = useGenerateRecurringExpenses()
+
+  const categoryFilterParam = searchParams.get('category')
+  const categoryFilter: number | null = useMemo(() => {
+    const n = Number(categoryFilterParam)
+    return Number.isInteger(n) && n > 0 ? n : null
+  }, [categoryFilterParam])
 
   const [viewMode, setViewMode] = useState<ViewMode>('timeline')
   const [selectedMonth, setSelectedMonth] = useState<SelectedMonth>(() => {
@@ -77,6 +83,34 @@ const ExpensesView = () => {
     return map
   }, [allCategories])
   const lookupCategory = (name: string): Category | undefined => categoriesByName.get(name.toLowerCase())
+  const categoriesById = useMemo(() => {
+    const map = new Map<number, Category>()
+    for (const c of allCategories) map.set(c.id, c)
+    return map
+  }, [allCategories])
+  const filteredCategory: Category | null = categoryFilter !== null ? (categoriesById.get(categoryFilter) ?? null) : null
+  // Once category data loads, drop a stale category filter (id no longer exists).
+  useEffect(() => {
+    if (categoryFilter === null) return
+    if (allCategories.length === 0) return
+    if (!categoriesById.has(categoryFilter)) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('category')
+      setSearchParams(next, { replace: true })
+    }
+  }, [categoryFilter, allCategories.length, categoriesById, searchParams, setSearchParams])
+
+  const handleSelectCategoryFilter = (id: number) => {
+    const next = new URLSearchParams(searchParams)
+    next.set('category', String(id))
+    setSearchParams(next)
+    setViewMode('timeline')
+  }
+  const handleClearCategoryFilter = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('category')
+    setSearchParams(next)
+  }
   const upsertBudget = useUpsertBudget()
   const deleteBudget = useDeleteBudget(monthKey)
   const changeBudgetFromNow = useChangeBudgetFromNow()
@@ -97,6 +131,7 @@ const ExpensesView = () => {
 
   const [editingBudgetCategory, setEditingBudgetCategory] = useState<string | null>(null)
   const [showBulkBudgetModal, setShowBulkBudgetModal] = useState(false)
+  const [showCategoryManager, setShowCategoryManager] = useState(false)
 
   const bulkBudgetEntries = useMemo<BudgetBulkEntry[]>(
     () => budgets.map(b => ({
@@ -131,10 +166,15 @@ const ExpensesView = () => {
     showToast({ message: `Saved ${changes.length} budget${changes.length !== 1 ? 's' : ''}`, variant: 'info' })
   }
 
+  const timelineExpenses = useMemo(() => {
+    if (categoryFilter === null) return expenses
+    return expenses.filter((e) => e.categoryId === categoryFilter)
+  }, [expenses, categoryFilter])
+
   const groupedExpenses = useMemo(() => {
     const groups: Record<string, Expense[]> = {}
 
-    expenses.forEach((expense) => {
+    timelineExpenses.forEach((expense) => {
       const date = new Date(expense.createdAt).toLocaleDateString('en-US', {
         weekday: 'short',
         month: 'short',
@@ -147,15 +187,15 @@ const ExpensesView = () => {
     })
 
     return Object.entries(groups).sort((a, b) => {
-      const dateA = new Date(expenses.find(e =>
+      const dateA = new Date(timelineExpenses.find(e =>
         new Date(e.createdAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) === a[0]
       )?.createdAt || 0)
-      const dateB = new Date(expenses.find(e =>
+      const dateB = new Date(timelineExpenses.find(e =>
         new Date(e.createdAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) === b[0]
       )?.createdAt || 0)
       return dateB.getTime() - dateA.getTime()
     })
-  }, [expenses])
+  }, [timelineExpenses])
 
   const categoryBreakdown = useMemo(() => {
     const categories: Record<string, { total: number; count: number }> = {}
@@ -240,8 +280,6 @@ const ExpensesView = () => {
     })
   }
 
-  const mod = (category: string) => categoryNameToModifier(category) || 'other'
-
   return (
     <div className="expenses-view">
       <div className="expenses-view__summary">
@@ -268,13 +306,13 @@ const ExpensesView = () => {
       <div className="expenses-view__controls">
         <div className="expenses-view__toggle">
           <button
-            onClick={() => setViewMode('timeline')}
+            onClick={() => { handleClearCategoryFilter(); setViewMode('timeline'); }}
             className={`expenses-view__toggle-btn${viewMode === 'timeline' ? ' expenses-view__toggle-btn--active' : ''}`}
           >
             Timeline
           </button>
           <button
-            onClick={() => setViewMode('category')}
+            onClick={() => { handleClearCategoryFilter(); setViewMode('category'); }}
             className={`expenses-view__toggle-btn${viewMode === 'category' ? ' expenses-view__toggle-btn--active' : ''}`}
           >
             By Category
@@ -289,6 +327,26 @@ const ExpensesView = () => {
           <span>Add</span>
         </button>
       </div>
+
+      {filteredCategory && viewMode === 'timeline' && (
+        <div className="expenses-view__filter-chip-row">
+          <button
+            type="button"
+            className="expenses-view__filter-chip"
+            onClick={handleClearCategoryFilter}
+            style={{ borderColor: filteredCategory.color }}
+          >
+            <span
+              className="expenses-view__filter-chip-icon"
+              style={{ backgroundColor: filteredCategory.color }}
+            >
+              {filteredCategory.icon}
+            </span>
+            <span className="expenses-view__filter-chip-name">{filteredCategory.name}</span>
+            <span className="expenses-view__filter-chip-close" aria-hidden>×</span>
+          </button>
+        </div>
+      )}
 
       <TagChipRow mode="quick-add" isCurrentMonth={isCurrentMonth} />
 
@@ -309,14 +367,17 @@ const ExpensesView = () => {
             <div key={date} className="expenses-view__date-group">
               <p className="expenses-view__date-header">{date}</p>
               <div className="expenses-view__day-expenses">
-                {dayExpenses.map((expense) => (
+                {dayExpenses.map((expense) => {
+                  const expenseCat = lookupCategory(expense.category)
+                  return (
                   <div
                     key={expense.id}
                     onClick={() => handleExpenseClick(expense.id)}
-                    className={`expenses-view__expense-card expenses-view__expense-card--${mod(expense.category)}`}
+                    className="expenses-view__expense-card"
+                    style={{ ['--cat-color' as string]: expenseCat?.color ?? '#6b7280' }}
                   >
                     <div className="expenses-view__expense-icon">
-                      {lookupCategory(expense.category)?.icon ?? FALLBACK_ICON}
+                      {expenseCat?.icon ?? FALLBACK_ICON}
                     </div>
                     <div className="expenses-view__expense-detail">
                       <p className="expenses-view__expense-category">{expense.category}</p>
@@ -354,7 +415,8 @@ const ExpensesView = () => {
                       </svg>
                     </button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           ))
@@ -364,13 +426,24 @@ const ExpensesView = () => {
               <span className="expenses-view__categories-title">
                 {categoryBreakdown.length > 0 ? 'Categories' : `No spend or budgets ${isCurrentMonth ? 'this month' : `in ${monthName}`}`}
               </span>
-              <button
-                className="expenses-view__edit-budgets-btn"
-                onClick={() => setShowBulkBudgetModal(true)}
-                type="button"
-              >
-                Edit budgets
-              </button>
+              <div className="expenses-view__categories-header-actions">
+                <button
+                  className="expenses-view__manage-categories-btn"
+                  onClick={() => setShowCategoryManager(true)}
+                  type="button"
+                  aria-label="Manage categories"
+                  title="Manage categories"
+                >
+                  ⚙
+                </button>
+                <button
+                  className="expenses-view__edit-budgets-btn"
+                  onClick={() => setShowBulkBudgetModal(true)}
+                  type="button"
+                >
+                  Edit budgets
+                </button>
+              </div>
             </div>
             {categoryBreakdown.map(({ category, total, count }) => {
               const budgetEntry = budgetByCategory[category]
@@ -392,11 +465,23 @@ const ExpensesView = () => {
                   ).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
                 : null
 
+              const cat = lookupCategory(category)
+              const catColor = cat?.color ?? '#6b7280'
               return (
-                <div key={category} className="expenses-view__category-card">
-                  <div className="expenses-view__category-header">
-                    <div className={`expenses-view__category-icon expenses-view__category-icon--${mod(category)}`}>
-                      {lookupCategory(category)?.icon ?? FALLBACK_ICON}
+                <div
+                  key={category}
+                  className="expenses-view__category-card"
+                  style={{ ['--cat-color' as string]: catColor }}
+                >
+                  <button
+                    type="button"
+                    className="expenses-view__category-header"
+                    onClick={() => cat && handleSelectCategoryFilter(cat.id)}
+                    disabled={!cat}
+                    aria-label={`Show only ${category} in timeline`}
+                  >
+                    <div className="expenses-view__category-icon">
+                      {cat?.icon ?? FALLBACK_ICON}
                     </div>
                     <div className="expenses-view__category-info">
                       <div className="expenses-view__category-row">
@@ -410,7 +495,7 @@ const ExpensesView = () => {
                         <p className="expenses-view__category-pct">{shareOfWallet.toFixed(1)}%</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                   {(tagBreakdownByCategory[category]?.length ?? 0) > 0 && (
                     <div className="expenses-view__category-tags">
                       {tagBreakdownByCategory[category]!.map(({ tag, total, count }) => (
@@ -435,10 +520,10 @@ const ExpensesView = () => {
                   )}
                   <div className="expenses-view__progress-track">
                     {hasBudget && (
-                      <div className={`expenses-view__progress-budget expenses-view__progress-budget--${mod(category)}`} />
+                      <div className="expenses-view__progress-budget" />
                     )}
                     <div
-                      className={`expenses-view__progress-fill expenses-view__progress-fill--${mod(category)}`}
+                      className="expenses-view__progress-fill"
                       style={{ width: `${spentPct}%` }}
                     />
                   </div>
@@ -534,6 +619,10 @@ const ExpensesView = () => {
           onSave={handleBulkBudgetSave}
           onCancel={() => setShowBulkBudgetModal(false)}
         />
+      )}
+
+      {showCategoryManager && (
+        <CategoryManageModal onClose={() => setShowCategoryManager(false)} />
       )}
     </div>
   )

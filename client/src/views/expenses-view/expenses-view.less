@@ -164,22 +164,13 @@
     display: flex;
     align-items: center;
     gap: @space-3;
-    border-left: 0.25em solid @gray-500;
+    border-left: 0.25em solid var(--cat-color, @gray-500);
     cursor: pointer;
     transition: @transition-colors;
 
     &:hover {
       background-color: @surface-750;
     }
-
-    &--food { border-left-color: @orange-500; }
-    &--groceries { border-left-color: @blue-500; }
-    &--transport { border-left-color: @amber-500; }
-    &--shopping { border-left-color: @pink-500; }
-    &--bills { border-left-color: @slate-500; }
-    &--entertainment { border-left-color: @purple-500; }
-    &--health { border-left-color: @emerald-500; }
-    &--other { border-left-color: @gray-500; }
   }
 
   &__expense-icon {
@@ -330,6 +321,86 @@
     align-items: center;
     gap: @space-3;
     margin-bottom: @space-3;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-radius: @radius-lg;
+    transition: @transition-colors;
+
+    &:hover:not(:disabled) {
+      background-color: @surface-700;
+    }
+    &:disabled { cursor: default; }
+  }
+
+  &__filter-chip-row {
+    padding: @space-3 @space-4 0;
+  }
+
+  &__categories-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: @space-2;
+  }
+
+  &__manage-categories-btn {
+    background: @surface-700;
+    color: @gray-200;
+    border: none;
+    border-radius: @radius-full;
+    width: 2em;
+    height: 2em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1em;
+    transition: @transition-colors;
+
+    &:hover { background: @surface-600; color: #fff; }
+  }
+
+  &__filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: @space-2;
+    padding: @space-1 @space-2 @space-1 @space-1;
+    border-radius: @radius-full;
+    background-color: @surface-800;
+    border: 1px solid @gray-500;
+    color: @gray-100;
+    font-size: 0.875em;
+    cursor: pointer;
+    transition: @transition-colors;
+
+    &:hover { background-color: @surface-700; }
+  }
+
+  &__filter-chip-icon {
+    width: 1.5em;
+    height: 1.5em;
+    border-radius: @radius-full;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875em;
+    color: #fff;
+    flex-shrink: 0;
+  }
+
+  &__filter-chip-name {
+    font-weight: 500;
+  }
+
+  &__filter-chip-close {
+    color: @gray-400;
+    margin-left: @space-1;
+    font-size: 1.125em;
+    line-height: 1;
   }
 
   &__category-icon {
@@ -341,16 +412,7 @@
     justify-content: center;
     font-size: 1.5em;
     flex-shrink: 0;
-    background-color: @gray-500;
-
-    &--food { background-color: @orange-500; }
-    &--groceries { background-color: @blue-500; }
-    &--transport { background-color: @amber-500; }
-    &--shopping { background-color: @pink-500; }
-    &--bills { background-color: @slate-500; }
-    &--entertainment { background-color: @purple-500; }
-    &--health { background-color: @emerald-500; }
-    &--other { background-color: @gray-500; }
+    background-color: var(--cat-color, @gray-500);
   }
 
   &__category-info {
@@ -443,15 +505,7 @@
     inset: 0;
     border-radius: @radius-full;
     opacity: 0.25;
-
-    &--food { background-color: @orange-500; }
-    &--groceries { background-color: @blue-500; }
-    &--transport { background-color: @amber-500; }
-    &--shopping { background-color: @pink-500; }
-    &--bills { background-color: @slate-500; }
-    &--entertainment { background-color: @purple-500; }
-    &--health { background-color: @emerald-500; }
-    &--other { background-color: @gray-500; }
+    background-color: var(--cat-color, @gray-500);
   }
 
   &__progress-fill {
@@ -460,16 +514,7 @@
     height: 100%;
     border-radius: @radius-full;
     transition: all 500ms ease;
-    background-color: @gray-500;
-
-    &--food { background-color: @orange-500; }
-    &--groceries { background-color: @blue-500; }
-    &--transport { background-color: @amber-500; }
-    &--shopping { background-color: @pink-500; }
-    &--bills { background-color: @slate-500; }
-    &--entertainment { background-color: @purple-500; }
-    &--health { background-color: @emerald-500; }
-    &--other { background-color: @gray-500; }
+    background-color: var(--cat-color, @gray-500);
   }
 
   &__budget-line {
