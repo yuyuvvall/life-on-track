@@ -171,23 +171,28 @@ const ExpenseQuickAdd = () => {
         <h1 className="expense-quick-add__page-title">
           {isEditMode ? 'Edit Expense' : 'Add Expense'}
         </h1>
-        {!isEditMode && !isRecurring && (
-          <button onClick={() => setShowDatePicker(true)} className="expense-quick-add__date-btn">
-            {formatDate(selectedDate).split(',')[0]}
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        )}
-        {isEditMode && (
-          <button onClick={() => setShowDatePicker(true)} className="expense-quick-add__date-btn">
-            {formatDate(selectedDate).split(',')[0]}
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        )}
-        {!isEditMode && isRecurring && <div className="expense-quick-add__header-spacer" />}
+        <div className="expense-quick-add__header-actions">
+          {!isEditMode && (
+            <button
+              type="button"
+              onClick={() => setShowRecurringOptions(true)}
+              className={`expense-quick-add__recurring-pill${
+                isRecurring ? ' expense-quick-add__recurring-pill--on' : ''
+              }`}
+            >
+              <span aria-hidden>🔄</span>
+              {isRecurring ? (recurrenceType === 'weekly' ? 'Weekly' : 'Monthly') : 'One-time'}
+            </button>
+          )}
+          {(isEditMode || !isRecurring) && (
+            <button onClick={() => setShowDatePicker(true)} className="expense-quick-add__date-btn">
+              {formatDate(selectedDate).split(',')[0]}
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="expense-quick-add__categories">
@@ -234,55 +239,6 @@ const ExpenseQuickAdd = () => {
           setNote(tag.note ?? '')
         }}
       />
-
-      <div className="expense-quick-add__banner">
-        <div>
-          <p className="expense-quick-add__banner-text">Category</p>
-          <p className="expense-quick-add__banner-name">{category}</p>
-        </div>
-        <div className="expense-quick-add__banner-icon">
-          {selectedCat.icon}
-        </div>
-      </div>
-
-      {!isEditMode && (
-        <div className="expense-quick-add__recurring-toggle">
-          <div className="expense-quick-add__recurring-row">
-            <div className="expense-quick-add__recurring-info">
-              <span className="expense-quick-add__recurring-icon">🔄</span>
-              <div>
-                <p className="expense-quick-add__recurring-title">Recurring Expense</p>
-                {isRecurring && (
-                  <p className="expense-quick-add__recurring-schedule">{getRecurrenceLabel()}</p>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                if (!isRecurring) { setIsRecurring(true); setShowRecurringOptions(true) }
-                else setIsRecurring(false)
-              }}
-              className={`expense-quick-add__toggle-switch${
-                isRecurring ? ' expense-quick-add__toggle-switch--on' : ''
-              }`}
-            >
-              <div
-                className={`expense-quick-add__toggle-knob${
-                  isRecurring ? ' expense-quick-add__toggle-knob--on' : ''
-                }`}
-              />
-            </button>
-          </div>
-          {isRecurring && (
-            <button
-              onClick={() => setShowRecurringOptions(true)}
-              className="expense-quick-add__change-schedule"
-            >
-              Change schedule
-            </button>
-          )}
-        </div>
-      )}
 
       <div className="expense-quick-add__amount-section">
         <p className="expense-quick-add__amount-label">
@@ -373,9 +329,15 @@ const ExpenseQuickAdd = () => {
         <RecurringOptionsModal
           recurrenceType={recurrenceType}
           recurrenceDay={recurrenceDay}
+          isRecurring={isRecurring}
           onSave={(type, day) => {
             setRecurrenceType(type)
             setRecurrenceDay(day)
+            setIsRecurring(true)
+            setShowRecurringOptions(false)
+          }}
+          onTurnOff={() => {
+            setIsRecurring(false)
             setShowRecurringOptions(false)
           }}
           onCancel={() => setShowRecurringOptions(false)}
