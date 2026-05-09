@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCreateExpense, useUpdateExpense, useExpense, useCreateRecurringExpense } from '@/hooks'
 import { useCategories } from '@/hooks/useCategories'
+import { CURRENCY_SYMBOL } from '@/utils/currency'
 import { WEEK_DAY_NAMES } from '@/utils/dateConstants'
 import type { RecurrenceType } from '@/types'
 import KeypadButton from './keypad-button'
@@ -241,7 +242,7 @@ const ExpenseQuickAdd = () => {
           {isRecurring ? 'Recurring Amount' : 'Expense'}
         </p>
         <p className="expense-quick-add__amount-display">
-          <span className="expense-quick-add__currency">₪</span> {amount}
+          <span className="expense-quick-add__currency">{CURRENCY_SYMBOL}</span> {amount}
         </p>
         <input
           type="text"
@@ -303,7 +304,7 @@ const ExpenseQuickAdd = () => {
           </button>
 
           <KeypadButton label="+" onClick={() => {}} disabled variant="operator" />
-          <KeypadButton label="₪" onClick={() => {}} disabled variant="operator" />
+          <KeypadButton label={CURRENCY_SYMBOL} onClick={() => {}} disabled variant="operator" />
           <KeypadButton label="0" onClick={() => handleKeyPress('0')} />
           <KeypadButton label="." onClick={() => handleKeyPress('.')} />
         </div>

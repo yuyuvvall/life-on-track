@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CURRENCY_SYMBOL } from '@/utils/currency'
 import './budgets-bulk-modal.less'
 
 const CATEGORIES = [
@@ -122,7 +123,7 @@ const BudgetsBulkModal = ({
                   )}
                 </div>
                 <div className="budgets-bulk-modal__input-wrap">
-                  <span className="budgets-bulk-modal__currency">₪</span>
+                  <span className="budgets-bulk-modal__currency">{CURRENCY_SYMBOL}</span>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -143,7 +144,7 @@ const BudgetsBulkModal = ({
 
         <div className="budgets-bulk-modal__total">
           <span className="budgets-bulk-modal__total-label">Total</span>
-          <span className="budgets-bulk-modal__total-amount">₪{totalLabel}</span>
+          <span className="budgets-bulk-modal__total-amount">{CURRENCY_SYMBOL}{totalLabel}</span>
         </div>
 
         <div className="budgets-bulk-modal__actions">

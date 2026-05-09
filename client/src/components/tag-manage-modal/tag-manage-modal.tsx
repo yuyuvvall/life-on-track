@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag } from '@/hooks/useTags';
 import { useCategories } from '@/hooks/useCategories';
+import { formatCurrency } from '@/utils/currency';
 import type { Category, CreateTagRequest, Tag } from '@/types';
 import './tag-manage-modal.less';
 
@@ -164,7 +165,7 @@ const TagManageModal = ({
                 </span>
                 <span className="tag-manage-modal__row-name">{tag.name}</span>
                 <span className="tag-manage-modal__row-meta">
-                  {tag.category} · ₪{tag.amount.toFixed(2)}
+                  {tag.category} · {formatCurrency(tag.amount)}
                 </span>
                 <button
                   type="button"

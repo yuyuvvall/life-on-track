@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CURRENCY_SYMBOL } from '@/utils/currency'
 import './budget-edit-modal.less'
 
 export type BudgetSaveMode = 'this-month-only' | 'from-now-on'
@@ -57,7 +58,7 @@ const BudgetEditModal = ({
         </div>
 
         <div className="budget-edit-modal__body">
-          <label className="budget-edit-modal__label" htmlFor="budget-amount">Amount (₪)</label>
+          <label className="budget-edit-modal__label" htmlFor="budget-amount">Amount ({CURRENCY_SYMBOL})</label>
           <input
             id="budget-amount"
             type="number"

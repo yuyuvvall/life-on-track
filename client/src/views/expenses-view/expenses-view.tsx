@@ -19,6 +19,7 @@ import TagManageModal from '@/components/tag-manage-modal'
 import CategoryManageModal from '@/components/category-manage-modal/category-manage-modal'
 import { useTags } from '@/hooks/useTags'
 import { useCategories } from '@/hooks/useCategories'
+import { formatCurrency } from '@/utils/currency'
 import type { Category, Expense, Tag } from '@/types'
 import './expenses-view.less'
 
@@ -339,7 +340,7 @@ const ExpensesView = () => {
     e.stopPropagation()
     deleteExpense.mutate(expense.id)
     showToast({
-      message: `Deleted ₪${expense.amount.toFixed(2)} ${expense.category}`,
+      message: `Deleted ${formatCurrency(expense.amount)} ${expense.category}`,
       variant: 'info',
       durationMs: 5000,
       action: {
@@ -385,7 +386,7 @@ const ExpensesView = () => {
             aria-label="Next month"
           >›</button>
         </div>
-        <p className="expenses-view__summary-total">₪ {totalSpent.toFixed(2)}</p>
+        <p className="expenses-view__summary-total">{formatCurrency(totalSpent, { space: true })}</p>
         <p className="expenses-view__summary-count">
           {expenses.length} expense{expenses.length !== 1 ? 's' : ''} {isCurrentMonth ? 'this month' : `in ${monthName}`}
         </p>
@@ -525,7 +526,7 @@ const ExpensesView = () => {
                       <p className="expenses-view__expense-time">{formatTime(expense.createdAt)}</p>
                     </div>
                     <div className="expenses-view__expense-amount">
-                      <p>₪ {expense.amount.toFixed(2)}</p>
+                      <p>{formatCurrency(expense.amount, { space: true })}</p>
                     </div>
                     <button
                       onClick={(e) => handleDelete(e, expense)}
@@ -614,7 +615,7 @@ const ExpensesView = () => {
                     <div className="expenses-view__category-info">
                       <div className="expenses-view__category-row">
                         <p className="expenses-view__category-name">{category}</p>
-                        <p className="expenses-view__category-amount">₪ {total.toFixed(2)}</p>
+                        <p className="expenses-view__category-amount">{formatCurrency(total, { space: true })}</p>
                       </div>
                       <div className="expenses-view__category-row">
                         <p className="expenses-view__category-count">
@@ -640,7 +641,7 @@ const ExpensesView = () => {
                           </span>
                           <span className="expenses-view__category-tag-name">{tag.name}</span>
                           <span className="expenses-view__category-tag-meta">
-                            ₪{total.toFixed(2)} · {count}×
+                            {formatCurrency(total)} · {count}×
                           </span>
                         </span>
                       ))}
@@ -660,8 +661,8 @@ const ExpensesView = () => {
                     >
                       <span>
                         {overBudget
-                          ? `₪ ${(total - budget).toFixed(2)} over ₪${budget.toFixed(2)} budget`
-                          : `₪ ${remaining.toFixed(2)} left of ₪${budget.toFixed(2)}`}
+                          ? `${formatCurrency(total - budget, { space: true })} over ${formatCurrency(budget)} budget`
+                          : `${formatCurrency(remaining, { space: true })} left of ${formatCurrency(budget)}`}
                       </span>
                       <span className="expenses-view__budget-line-pct">
                         · {budgetUsedPct.toFixed(0)}%
@@ -731,7 +732,7 @@ const ExpensesView = () => {
                     <div className="expenses-view__category-info">
                       <div className="expenses-view__category-row">
                         <p className="expenses-view__category-name">{name}</p>
-                        <p className="expenses-view__category-amount">₪ {total.toFixed(2)}</p>
+                        <p className="expenses-view__category-amount">{formatCurrency(total, { space: true })}</p>
                       </div>
                       <div className="expenses-view__category-row">
                         <p className="expenses-view__category-count">
