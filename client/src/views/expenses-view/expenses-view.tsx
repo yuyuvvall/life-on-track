@@ -570,13 +570,14 @@ const ExpensesView = () => {
               const budgetEntry = budgetByCategory[category]
               const budget = budgetEntry?.amount ?? 0
               const hasBudget = budget > 0
-              const spentPct = hasBudget
-                ? Math.min(100, (total / budget) * 100)
-                : (totalSpent > 0 ? (total / totalSpent) * 100 : 0)
               const overBudget = hasBudget && total > budget
               const remaining = hasBudget ? budget - total : 0
               const shareOfWallet = totalSpent > 0 ? (total / totalSpent) * 100 : 0
               const budgetUsedPct = hasBudget ? (total / budget) * 100 : 0
+              // Wallet-share is now the primary bar (always shown, comparable across cards).
+              // Budget consumption gets its own track below, only when a budget is set.
+              const walletBarPct = shareOfWallet
+              const budgetBarPct = hasBudget ? Math.min(100, budgetUsedPct) : 0
               const inheritedFromMonth = budgetEntry?.inheritedFromMonth ?? null
               const inheritedLabel = inheritedFromMonth
                 ? new Date(
@@ -601,8 +602,14 @@ const ExpensesView = () => {
                     disabled={!cat}
                     aria-label={`Show only ${category} in timeline`}
                   >
-                    <div className="expenses-view__category-icon">
-                      {cat?.icon ?? FALLBACK_ICON}
+                    <div
+                      className="expenses-view__category-icon"
+                      data-has-budget={hasBudget ? '' : undefined}
+                      style={hasBudget ? { ['--budget-used-pct' as string]: `${budgetBarPct}%` } : undefined}
+                      title={hasBudget ? `${budgetUsedPct.toFixed(0)}% of budget used` : undefined}
+                    >
+                      {hasBudget && <span className="expenses-view__category-icon-fill" aria-hidden="true" />}
+                      <span className="expenses-view__category-icon-emoji">{cat?.icon ?? FALLBACK_ICON}</span>
                     </div>
                     <div className="expenses-view__category-info">
                       <div className="expenses-view__category-row">
@@ -640,12 +647,9 @@ const ExpensesView = () => {
                     </div>
                   )}
                   <div className="expenses-view__progress-track">
-                    {hasBudget && (
-                      <div className="expenses-view__progress-budget" />
-                    )}
                     <div
                       className="expenses-view__progress-fill"
-                      style={{ width: `${spentPct}%` }}
+                      style={{ width: `${walletBarPct}%` }}
                     />
                   </div>
                   {hasBudget ? (
