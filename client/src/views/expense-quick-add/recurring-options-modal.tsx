@@ -6,17 +6,23 @@ import './recurring-options-modal.less'
 export type RecurringOptionsModalProps = {
   recurrenceType: RecurrenceType
   recurrenceDay: number
+  isRecurring: boolean
   onSave: (type: RecurrenceType, day: number) => void
+  onTurnOff: () => void
   onCancel: () => void
 }
+
+type TempType = RecurrenceType | 'off'
 
 const RecurringOptionsModal = ({
   recurrenceType,
   recurrenceDay,
+  isRecurring,
   onSave,
+  onTurnOff,
   onCancel,
 }: RecurringOptionsModalProps) => {
-  const [tempType, setTempType] = useState(recurrenceType)
+  const [tempType, setTempType] = useState<TempType>(isRecurring ? recurrenceType : 'off')
   const [tempDay, setTempDay] = useState(recurrenceDay)
 
   return (
@@ -32,6 +38,14 @@ const RecurringOptionsModal = ({
 
         <div className="recurring-options-modal__body">
           <div className="recurring-options-modal__type-group">
+            <button
+              onClick={() => setTempType('off')}
+              className={`recurring-options-modal__type-btn${
+                tempType === 'off' ? ' recurring-options-modal__type-btn--active' : ''
+              }`}
+            >
+              Off
+            </button>
             <button
               onClick={() => { setTempType('weekly'); setTempDay(0) }}
               className={`recurring-options-modal__type-btn${
@@ -50,7 +64,11 @@ const RecurringOptionsModal = ({
             </button>
           </div>
 
-          {tempType === 'weekly' ? (
+          {tempType === 'off' ? (
+            <p className="recurring-options-modal__off-hint">
+              Recurring is turned off. This expense will be saved as a one-time entry.
+            </p>
+          ) : tempType === 'weekly' ? (
             <div>
               <p className="recurring-options-modal__day-label">Day of week</p>
               <div className="recurring-options-modal__day-grid">
@@ -92,7 +110,10 @@ const RecurringOptionsModal = ({
             Cancel
           </button>
           <button
-            onClick={() => onSave(tempType, tempDay)}
+            onClick={() => {
+              if (tempType === 'off') onTurnOff()
+              else onSave(tempType, tempDay)
+            }}
             className="recurring-options-modal__save-btn"
           >
             Save

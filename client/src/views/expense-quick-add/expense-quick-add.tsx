@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCreateExpense, useUpdateExpense, useExpense, useCreateRecurringExpense } from '@/hooks'
+import { useCategories } from '@/hooks/useCategories'
+import { CURRENCY_SYMBOL } from '@/utils/currency'
 import { WEEK_DAY_NAMES } from '@/utils/dateConstants'
 import type { RecurrenceType } from '@/types'
 import KeypadButton from './keypad-button'
@@ -9,19 +11,6 @@ import DatePickerModal from './date-picker-modal'
 import TagChipRow from '@/components/tag-chip-row'
 import TagManageModal from '@/components/tag-manage-modal'
 import './expense-quick-add.less'
-
-const CATEGORIES = [
-  { id: 'Food', icon: '🍴', color: '#f97316' },
-  { id: 'Groceries', icon: '🛒', color: '#3b82f6' },
-  { id: 'Transport', icon: '🚌', color: '#f59e0b' },
-  { id: 'Shopping', icon: '🛍️', color: '#ec4899' },
-  { id: 'Bills', icon: '📄', color: '#64748b' },
-  { id: 'Entertainment', icon: '🎮', color: '#a855f7' },
-  { id: 'Health', icon: '💊', color: '#10b981' },
-  { id: 'Other', icon: '📦', color: '#6b7280' },
-] as const
-
-type CategoryId = typeof CATEGORIES[number]['id']
 
 const parseInitialDate = (dateParam: string | null): Date => {
   if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return new Date()
@@ -43,9 +32,10 @@ const ExpenseQuickAdd = () => {
   const updateExpense = useUpdateExpense()
   const createRecurringExpense = useCreateRecurringExpense()
   const { data: existingExpense, isLoading: isLoadingExpense } = useExpense(expenseId)
+  const { data: categories = [] } = useCategories()
 
   const [amount, setAmount] = useState('0')
-  const [category, setCategory] = useState<CategoryId>('Food')
+  const [category, setCategory] = useState<string>('Food')
   const [note, setNote] = useState('')
   const [tagId, setTagId] = useState<number | null>(null)
   const [selectedDate, setSelectedDate] = useState(() => parseInitialDate(searchParams.get('date')))
@@ -61,14 +51,21 @@ const ExpenseQuickAdd = () => {
   useEffect(() => {
     if (existingExpense) {
       setAmount(existingExpense.amount.toString())
-      setCategory(existingExpense.category as CategoryId)
+      setCategory(existingExpense.category)
       setNote(existingExpense.note || '')
       setSelectedDate(new Date(existingExpense.createdAt))
       setTagId(existingExpense.tagId)
     }
   }, [existingExpense])
 
-  const selectedCat = CATEGORIES.find(c => c.id === category)!
+  // Once categories load, ensure selected category exists in the list (first non-archived).
+  useEffect(() => {
+    if (categories.length === 0) return
+    if (existingExpense) return
+    const exists = categories.some((c) => c.name === category)
+    if (!exists) setCategory(categories[0].name)
+  }, [categories, existingExpense, category])
+
   const isPending = createExpense.isPending || updateExpense.isPending || createRecurringExpense.isPending
 
   const handleKeyPress = (key: string) => {
@@ -171,49 +168,54 @@ const ExpenseQuickAdd = () => {
         <h1 className="expense-quick-add__page-title">
           {isEditMode ? 'Edit Expense' : 'Add Expense'}
         </h1>
-        {!isEditMode && !isRecurring && (
-          <button onClick={() => setShowDatePicker(true)} className="expense-quick-add__date-btn">
-            {formatDate(selectedDate).split(',')[0]}
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        )}
-        {isEditMode && (
-          <button onClick={() => setShowDatePicker(true)} className="expense-quick-add__date-btn">
-            {formatDate(selectedDate).split(',')[0]}
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        )}
-        {!isEditMode && isRecurring && <div className="expense-quick-add__header-spacer" />}
+        <div className="expense-quick-add__header-actions">
+          {!isEditMode && (
+            <button
+              type="button"
+              onClick={() => setShowRecurringOptions(true)}
+              className={`expense-quick-add__recurring-pill${
+                isRecurring ? ' expense-quick-add__recurring-pill--on' : ''
+              }`}
+            >
+              <span aria-hidden>🔄</span>
+              {isRecurring ? (recurrenceType === 'weekly' ? 'Weekly' : 'Monthly') : 'One-time'}
+            </button>
+          )}
+          {(isEditMode || !isRecurring) && (
+            <button onClick={() => setShowDatePicker(true)} className="expense-quick-add__date-btn">
+              {formatDate(selectedDate).split(',')[0]}
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="expense-quick-add__categories">
         <div className="expense-quick-add__category-scroll">
-          {CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => setCategory(cat.id)}
+              onClick={() => setCategory(cat.name)}
               className={`expense-quick-add__category-btn${
-                category === cat.id ? ' expense-quick-add__category-btn--selected' : ''
+                category === cat.name ? ' expense-quick-add__category-btn--selected' : ''
               }`}
             >
               <div
                 className={`expense-quick-add__category-circle${
-                  category === cat.id ? ' expense-quick-add__category-circle--active' : ''
+                  category === cat.name ? ' expense-quick-add__category-circle--active' : ''
                 }`}
-                style={category === cat.id ? { backgroundColor: cat.color } : undefined}
+                style={category === cat.name ? { backgroundColor: cat.color } : undefined}
               >
                 {cat.icon}
               </div>
               <span
                 className={`expense-quick-add__category-label${
-                  category === cat.id ? ' expense-quick-add__category-label--active' : ''
+                  category === cat.name ? ' expense-quick-add__category-label--active' : ''
                 }`}
               >
-                {cat.id}
+                {cat.name}
               </span>
             </button>
           ))}
@@ -230,66 +232,17 @@ const ExpenseQuickAdd = () => {
           }
           setTagId(tag.id)
           setAmount(String(tag.amount))
-          setCategory(tag.category as CategoryId)
+          setCategory(tag.category)
           setNote(tag.note ?? '')
         }}
       />
-
-      <div className="expense-quick-add__banner">
-        <div>
-          <p className="expense-quick-add__banner-text">Category</p>
-          <p className="expense-quick-add__banner-name">{category}</p>
-        </div>
-        <div className="expense-quick-add__banner-icon">
-          {selectedCat.icon}
-        </div>
-      </div>
-
-      {!isEditMode && (
-        <div className="expense-quick-add__recurring-toggle">
-          <div className="expense-quick-add__recurring-row">
-            <div className="expense-quick-add__recurring-info">
-              <span className="expense-quick-add__recurring-icon">🔄</span>
-              <div>
-                <p className="expense-quick-add__recurring-title">Recurring Expense</p>
-                {isRecurring && (
-                  <p className="expense-quick-add__recurring-schedule">{getRecurrenceLabel()}</p>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                if (!isRecurring) { setIsRecurring(true); setShowRecurringOptions(true) }
-                else setIsRecurring(false)
-              }}
-              className={`expense-quick-add__toggle-switch${
-                isRecurring ? ' expense-quick-add__toggle-switch--on' : ''
-              }`}
-            >
-              <div
-                className={`expense-quick-add__toggle-knob${
-                  isRecurring ? ' expense-quick-add__toggle-knob--on' : ''
-                }`}
-              />
-            </button>
-          </div>
-          {isRecurring && (
-            <button
-              onClick={() => setShowRecurringOptions(true)}
-              className="expense-quick-add__change-schedule"
-            >
-              Change schedule
-            </button>
-          )}
-        </div>
-      )}
 
       <div className="expense-quick-add__amount-section">
         <p className="expense-quick-add__amount-label">
           {isRecurring ? 'Recurring Amount' : 'Expense'}
         </p>
         <p className="expense-quick-add__amount-display">
-          <span className="expense-quick-add__currency">₪</span> {amount}
+          <span className="expense-quick-add__currency">{CURRENCY_SYMBOL}</span> {amount}
         </p>
         <input
           type="text"
@@ -351,7 +304,7 @@ const ExpenseQuickAdd = () => {
           </button>
 
           <KeypadButton label="+" onClick={() => {}} disabled variant="operator" />
-          <KeypadButton label="₪" onClick={() => {}} disabled variant="operator" />
+          <KeypadButton label={CURRENCY_SYMBOL} onClick={() => {}} disabled variant="operator" />
           <KeypadButton label="0" onClick={() => handleKeyPress('0')} />
           <KeypadButton label="." onClick={() => handleKeyPress('.')} />
         </div>
@@ -373,29 +326,39 @@ const ExpenseQuickAdd = () => {
         <RecurringOptionsModal
           recurrenceType={recurrenceType}
           recurrenceDay={recurrenceDay}
+          isRecurring={isRecurring}
           onSave={(type, day) => {
             setRecurrenceType(type)
             setRecurrenceDay(day)
+            setIsRecurring(true)
+            setShowRecurringOptions(false)
+          }}
+          onTurnOff={() => {
+            setIsRecurring(false)
             setShowRecurringOptions(false)
           }}
           onCancel={() => setShowRecurringOptions(false)}
         />
       )}
 
-      {saveAsTagOpen && (
-        <TagManageModal
-          initialMode="create"
-          initialDraft={{
-            name: note || category,
-            category,
-            amount: parseFloat(amount) || 0,
-            note: note || undefined,
-            icon: selectedCat.icon,
-            color: selectedCat.color,
-          }}
-          onClose={() => setSaveAsTagOpen(false)}
-        />
-      )}
+      {saveAsTagOpen && (() => {
+        const selectedCat = categories.find((c) => c.name === category)
+        return (
+          <TagManageModal
+            initialMode="create"
+            initialDraft={{
+              name: note || category,
+              category,
+              amount: parseFloat(amount) || 0,
+              note: note || undefined,
+              icon: selectedCat?.icon ?? '📦',
+              color: selectedCat?.color ?? '#6b7280',
+            }}
+            onCreated={(tag) => setTagId(tag.id)}
+            onClose={() => setSaveAsTagOpen(false)}
+          />
+        )
+      })()}
     </div>
   )
 }

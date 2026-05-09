@@ -41,11 +41,13 @@ router.get('/', async (req, res) => {
     }, 'getWeeklyWorkLogs');
     const workLogs = workLogsResult.rows as unknown as WorkLogRow[];
 
-    // Get expenses for the week
+    // Get expenses for the week (joining categories so the response carries the live name)
     const expensesResult = await trackedExecute({
-      sql: `SELECT * FROM expenses 
-            WHERE DATE(created_at) BETWEEN ? AND ?
-            ORDER BY created_at DESC`,
+      sql: `SELECT expenses.id, expenses.amount, expenses.category_id, expenses.note,
+                   expenses.created_at, expenses.tag_id, c.name AS category
+            FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
+            WHERE DATE(expenses.created_at) BETWEEN ? AND ?
+            ORDER BY expenses.created_at DESC`,
       args: [weekStart, weekEnd]
     }, 'getWeeklyExpenses');
     const expenses = expensesResult.rows as unknown as ExpenseRow[];

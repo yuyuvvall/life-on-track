@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS work_logs (
 CREATE TABLE IF NOT EXISTS expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     amount REAL NOT NULL,
-    category TEXT NOT NULL,
+    category_id INTEGER REFERENCES categories(id),
     note TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS expenses (
 CREATE TABLE IF NOT EXISTS recurring_expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     amount REAL NOT NULL,
-    category TEXT NOT NULL,
+    category_id INTEGER REFERENCES categories(id),
     note TEXT,
     recurrence_type TEXT NOT NULL CHECK (recurrence_type IN ('weekly', 'monthly')),
     recurrence_day INTEGER NOT NULL,
@@ -129,13 +129,25 @@ CREATE TABLE IF NOT EXISTS category_budgets (
 CREATE TABLE IF NOT EXISTS expense_tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    category TEXT NOT NULL,
+    category_id INTEGER REFERENCES categories(id),
     amount REAL NOT NULL CHECK (amount >= 0),
     note TEXT,
     icon TEXT NOT NULL,
     color TEXT NOT NULL,
     is_archived INTEGER NOT NULL DEFAULT 0,
     last_used_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5d. Expense Categories (user-editable; replaces hard-coded frontend list)
+CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    icon TEXT NOT NULL,
+    color TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_archived INTEGER NOT NULL DEFAULT 0,
+    is_system INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -157,6 +169,7 @@ CREATE INDEX IF NOT EXISTS idx_expenses_created ON expenses(created_at);
 CREATE INDEX IF NOT EXISTS idx_recurring_expenses_active ON recurring_expenses(is_active);
 CREATE INDEX IF NOT EXISTS idx_category_budgets_month ON category_budgets(month);
 CREATE INDEX IF NOT EXISTS idx_expense_tags_archived ON expense_tags(is_archived);
+CREATE INDEX IF NOT EXISTS idx_categories_archived ON categories(is_archived, sort_order);
 `;
 
 // Initialize schema on startup
@@ -214,6 +227,143 @@ async function initializeDatabase() {
   } catch {
     // Column already exists, ignore error
   }
+
+  // Migration: Add category_id columns to all category-bearing tables
+  try { await db.execute('ALTER TABLE expenses ADD COLUMN category_id INTEGER REFERENCES categories(id)'); console.log('[Database] Added category_id to expenses'); } catch {}
+  try { await db.execute('ALTER TABLE recurring_expenses ADD COLUMN category_id INTEGER REFERENCES categories(id)'); console.log('[Database] Added category_id to recurring_expenses'); } catch {}
+  try { await db.execute('ALTER TABLE category_budgets ADD COLUMN category_id INTEGER REFERENCES categories(id)'); console.log('[Database] Added category_id to category_budgets'); } catch {}
+  try { await db.execute('ALTER TABLE expense_tags ADD COLUMN category_id INTEGER REFERENCES categories(id)'); console.log('[Database] Added category_id to expense_tags'); } catch {}
+
+  await seedAndBackfillCategories();
+}
+
+const DEFAULT_CATEGORIES: ReadonlyArray<{ name: string; icon: string; color: string; isSystem: 0 | 1 }> = [
+  { name: 'Food',          icon: '🍴', color: '#f97316', isSystem: 0 },
+  { name: 'Groceries',     icon: '🛒', color: '#3b82f6', isSystem: 0 },
+  { name: 'Transport',     icon: '🚌', color: '#f59e0b', isSystem: 0 },
+  { name: 'Shopping',      icon: '🛍️', color: '#ec4899', isSystem: 0 },
+  { name: 'Bills',         icon: '📄', color: '#64748b', isSystem: 0 },
+  { name: 'Entertainment', icon: '🎮', color: '#a855f7', isSystem: 0 },
+  { name: 'Health',        icon: '💊', color: '#10b981', isSystem: 0 },
+  { name: 'Other',         icon: '📦', color: '#6b7280', isSystem: 1 },
+];
+
+const FALLBACK_PALETTE = [
+  '#f97316', '#f59e0b', '#eab308', '#84cc16', '#10b981', '#14b8a6',
+  '#06b6d4', '#3b82f6', '#6366f1', '#a855f7', '#ec4899', '#ef4444',
+  '#64748b', '#6b7280', '#78716c', '#0ea5e9',
+];
+
+const TABLES_WITH_CATEGORY: ReadonlyArray<string> = [
+  'expenses',
+  'recurring_expenses',
+  'category_budgets',
+  'expense_tags',
+];
+
+async function seedAndBackfillCategories() {
+  // Step 1: seed defaults if not present (idempotent via UNIQUE on name)
+  for (let i = 0; i < DEFAULT_CATEGORIES.length; i++) {
+    const c = DEFAULT_CATEGORIES[i];
+    await db.execute({
+      sql: 'INSERT OR IGNORE INTO categories (name, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, ?)',
+      args: [c.name, c.icon, c.color, i, c.isSystem],
+    });
+  }
+
+  // Step 2 + 3: back-fill category_id; auto-create unknown categories.
+  // Each table is wrapped in try/catch because the legacy `category` text
+  // column may already have been dropped on this DB. After the first
+  // successful run, every row has `category_id` and the column drop in the
+  // ALTER block below leaves nothing for the back-fill to do.
+  for (const table of TABLES_WITH_CATEGORY) {
+    try {
+      // First pass: fill from existing categories (case-insensitive name match)
+      await db.execute(`
+        UPDATE ${table}
+           SET category_id = (
+             SELECT id FROM categories
+              WHERE LOWER(name) = LOWER(${table}.category)
+              LIMIT 1
+           )
+         WHERE category_id IS NULL
+      `);
+
+      // Find any remaining unknown category strings and create rows for them.
+      const unknown = await db.execute({
+        sql: `SELECT DISTINCT category FROM ${table} WHERE category_id IS NULL`,
+        args: [],
+      });
+      const unknownNames = unknown.rows
+        .map((r) => (r as unknown as { category: string }).category)
+        .filter((n): n is string => typeof n === 'string' && n.trim().length > 0);
+
+      if (unknownNames.length > 0) {
+        const maxResult = await db.execute('SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories');
+        let nextOrder = Number((maxResult.rows[0] as unknown as { m: number }).m) + 1;
+        for (const name of unknownNames) {
+          const color = FALLBACK_PALETTE[(nextOrder - 1) % FALLBACK_PALETTE.length];
+          await db.execute({
+            sql: 'INSERT OR IGNORE INTO categories (name, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, 0)',
+            args: [name, '📦', color, nextOrder],
+          });
+          nextOrder += 1;
+        }
+
+        // Second pass to back-fill the rows we just created categories for.
+        await db.execute(`
+          UPDATE ${table}
+             SET category_id = (
+               SELECT id FROM categories
+                WHERE LOWER(name) = LOWER(${table}.category)
+                LIMIT 1
+             )
+           WHERE category_id IS NULL
+        `);
+      }
+    } catch {
+      // Column already dropped — back-fill no longer needed for this table.
+    }
+  }
+
+  console.log('[Database] Categories seeded and back-filled');
+
+  // Phase 4: drop the legacy `category` text columns now that:
+  //   - every row has a non-null category_id (back-fill above),
+  //   - every reader JOINs through categories, and
+  //   - every writer sets category_id only.
+  // category_budgets keeps its `category` column because it is part of a
+  // UNIQUE(category, month) constraint that would require a table rebuild
+  // to remove. That's a separate cleanup.
+  try { await db.execute('ALTER TABLE expenses DROP COLUMN category'); console.log('[Database] Dropped legacy expenses.category column'); } catch {}
+  try { await db.execute('ALTER TABLE recurring_expenses DROP COLUMN category'); console.log('[Database] Dropped legacy recurring_expenses.category column'); } catch {}
+  try { await db.execute('ALTER TABLE expense_tags DROP COLUMN category'); console.log('[Database] Dropped legacy expense_tags.category column'); } catch {}
+}
+
+/**
+ * Resolve a category name to its id (case-insensitive).
+ * If no category matches, creates a new one with a fallback icon/color and
+ * returns its id. Used by INSERT/UPDATE handlers to keep `category_id`
+ * populated on every write so filters/joins are always accurate.
+ */
+export async function resolveCategoryId(name: string): Promise<number | null> {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const lookup = await db.execute({
+    sql: 'SELECT id FROM categories WHERE LOWER(name) = LOWER(?) LIMIT 1',
+    args: [trimmed],
+  });
+  const existing = lookup.rows[0] as unknown as { id: number } | undefined;
+  if (existing) return existing.id;
+
+  const maxResult = await db.execute('SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories');
+  const nextOrder = Number((maxResult.rows[0] as unknown as { m: number }).m) + 1;
+  const color = FALLBACK_PALETTE[(nextOrder - 1) % FALLBACK_PALETTE.length];
+  const insert = await db.execute({
+    sql: 'INSERT INTO categories (name, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, 0)',
+    args: [trimmed, '📦', color, nextOrder],
+  });
+  return Number(insert.lastInsertRowid);
 }
 
 // Initialize database (called from server startup)

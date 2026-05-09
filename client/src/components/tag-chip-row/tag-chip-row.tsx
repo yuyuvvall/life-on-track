@@ -4,6 +4,7 @@ import { useCreateExpense, useDeleteExpense } from '@/hooks/useExpenses';
 import { showToast } from '@/store/toastStore';
 import type { Tag } from '@/types';
 import TagManageModal from '@/components/tag-manage-modal';
+import { formatCurrency } from '@/utils/currency';
 import './tag-chip-row.less';
 
 type CommonProps = {
@@ -38,7 +39,7 @@ const TagChipRow = (props: TagChipRowProps) => {
       {
         onSuccess: (created) => {
           showToast({
-            message: `Logged ₪${tag.amount.toFixed(2)} ${tag.name}`,
+            message: `Logged ${formatCurrency(tag.amount)} ${tag.name}`,
             variant: 'info',
             durationMs: 5000,
             action: created
@@ -105,7 +106,7 @@ const TagChipRow = (props: TagChipRowProps) => {
                 }`}
                 style={{ borderColor: tag.color }}
                 onClick={() => handleChipClick(tag)}
-                aria-label={`${tag.name} ₪${tag.amount.toFixed(2)}`}
+                aria-label={`${tag.name} ${formatCurrency(tag.amount)}`}
               >
                 <span
                   className="tag-chip-row__icon"
@@ -115,7 +116,7 @@ const TagChipRow = (props: TagChipRowProps) => {
                 </span>
                 <span className="tag-chip-row__name">{tag.name}</span>
                 <span className="tag-chip-row__amount">
-                  ₪ {tag.amount.toFixed(2)}
+                  {formatCurrency(tag.amount, { space: true })}
                 </span>
               </button>
             );

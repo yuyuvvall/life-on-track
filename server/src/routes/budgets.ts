@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import db, { trackedExecute } from '../db/index.js';
+import db, { trackedExecute, resolveCategoryId } from '../db/index.js';
 import type { CategoryBudgetRow } from '../types.js';
 import { budgetRowToBudget } from '../types.js';
 
@@ -95,10 +95,12 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'amount must be a non-negative number' });
     }
 
+    const categoryId = await resolveCategoryId(category);
+
     await trackedExecute({
-      sql: `INSERT INTO category_budgets (category, month, amount) VALUES (?, ?, ?)
-            ON CONFLICT(category, month) DO UPDATE SET amount = excluded.amount`,
-      args: [category, month, amount]
+      sql: `INSERT INTO category_budgets (category, category_id, month, amount) VALUES (?, ?, ?, ?)
+            ON CONFLICT(category, month) DO UPDATE SET amount = excluded.amount, category_id = excluded.category_id`,
+      args: [category, categoryId, month, amount]
     }, 'upsertBudget');
 
     const result = await trackedExecute({
@@ -155,12 +157,14 @@ router.post('/change-from-now', async (req, res) => {
       return res.status(400).json({ message: 'amount must be a non-negative number' });
     }
 
+    const categoryId = await resolveCategoryId(category);
+
     // Atomic: upsert for this month + delete any later rows for this category.
     await db.batch([
       {
-        sql: `INSERT INTO category_budgets (category, month, amount) VALUES (?, ?, ?)
-              ON CONFLICT(category, month) DO UPDATE SET amount = excluded.amount`,
-        args: [category, month, amount],
+        sql: `INSERT INTO category_budgets (category, category_id, month, amount) VALUES (?, ?, ?, ?)
+              ON CONFLICT(category, month) DO UPDATE SET amount = excluded.amount, category_id = excluded.category_id`,
+        args: [category, categoryId, month, amount],
       },
       {
         sql: 'DELETE FROM category_budgets WHERE category = ? AND month > ?',
