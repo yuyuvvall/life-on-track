@@ -45,7 +45,8 @@ const ExpensesView = () => {
     return Number.isInteger(n) && n > 0 ? n : null
   }, [categoryFilterParam])
 
-  const [viewMode, setViewMode] = useState<ViewMode>('timeline')
+  // Default to "By Category" — drill into a card to switch to the filtered timeline.
+  const [viewMode, setViewMode] = useState<ViewMode>('category')
   const [selectedMonth, setSelectedMonth] = useState<SelectedMonth>(() => {
     const now = new Date()
     return { year: now.getFullYear(), month: now.getMonth() }
