@@ -1,3 +1,4 @@
+import { formatCurrency } from '@/utils/currency'
 import './spending-chart.less'
 
 export type SpendingChartProps = {
@@ -37,7 +38,7 @@ const SpendingChart = ({ expensesByCategory, totalExpenses }: SpendingChartProps
       <div className="spending-chart__header">
         <h3 className="spending-chart__title">Spending</h3>
         <span className="spending-chart__total">
-          ${totalExpenses.toFixed(2)}
+          {formatCurrency(totalExpenses)}
         </span>
       </div>
 
@@ -50,7 +51,7 @@ const SpendingChart = ({ expensesByCategory, totalExpenses }: SpendingChartProps
             <div key={category}>
               <div className="spending-chart__category-label">
                 <span className="spending-chart__category-name">{category}</span>
-                <span className="spending-chart__category-amount">${amount.toFixed(2)}</span>
+                <span className="spending-chart__category-amount">{formatCurrency(amount)}</span>
               </div>
               <div className="spending-chart__bar-track">
                 <div

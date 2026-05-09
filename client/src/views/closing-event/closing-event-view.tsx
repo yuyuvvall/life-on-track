@@ -13,6 +13,7 @@ import {
 import { IntegrityHeatmap } from '@/components/integrity-heatmap'
 import { SpendingChart } from '@/components/spending-chart'
 import { GoalsProgress } from '@/components/goals-progress'
+import { formatCurrency } from '@/utils/currency'
 import DayNotesContent from './day-notes-content'
 import IntegrityEditForm from './integrity-edit-form'
 import DayNotesModal from './day-notes-modal'
@@ -254,7 +255,7 @@ const ClosingEventView = () => {
             <div className="closing-event-view__stat">
               <div className="closing-event-view__stat-label">Total Expenses</div>
               <div className="closing-event-view__stat-value">
-                ${summary.totalExpenses.toFixed(2)}
+                {formatCurrency(summary.totalExpenses)}
               </div>
             </div>
             <div className="closing-event-view__stat">
