@@ -15,6 +15,7 @@ import { showToast } from '@/store/toastStore'
 import { BudgetEditModal, BudgetsBulkModal } from '@/components'
 import type { BudgetBulkChange, BudgetBulkEntry } from '@/components'
 import TagChipRow from '@/components/tag-chip-row'
+import TagManageModal from '@/components/tag-manage-modal'
 import CategoryManageModal from '@/components/category-manage-modal/category-manage-modal'
 import { useTags } from '@/hooks/useTags'
 import { useCategories } from '@/hooks/useCategories'
@@ -22,8 +23,12 @@ import type { Category, Expense, Tag } from '@/types'
 import './expenses-view.less'
 
 const FALLBACK_ICON = '📦'
+const UNTAGGED_COLOR = '#6b7280'
+const UNTAGGED_ICON = '—'
 
-type ViewMode = 'timeline' | 'category'
+type ViewMode = 'category' | 'timeline' | 'tag'
+
+type TagFilter = number | 'none' | null
 
 type SelectedMonth = { year: number; month: number }
 
@@ -44,6 +49,13 @@ const ExpensesView = () => {
     const n = Number(categoryFilterParam)
     return Number.isInteger(n) && n > 0 ? n : null
   }, [categoryFilterParam])
+
+  const tagFilterParam = searchParams.get('tag')
+  const tagFilter: TagFilter = useMemo(() => {
+    if (tagFilterParam === 'none') return 'none'
+    const n = Number(tagFilterParam)
+    return Number.isInteger(n) && n > 0 ? n : null
+  }, [tagFilterParam])
 
   // Default to "By Category" — drill into a card to switch to the filtered timeline.
   const [viewMode, setViewMode] = useState<ViewMode>('category')
@@ -101,15 +113,58 @@ const ExpensesView = () => {
     }
   }, [categoryFilter, allCategories.length, categoriesById, searchParams, setSearchParams])
 
+  // Resolved display for whichever tag-shaped thing is in the filter (real Tag,
+  // synthetic "Untagged", or none).
+  const filteredTagDisplay: { name: string; icon: string; color: string } | null = useMemo(() => {
+    if (tagFilter === 'none') return { name: 'Untagged', icon: UNTAGGED_ICON, color: UNTAGGED_COLOR }
+    if (typeof tagFilter === 'number') {
+      const t = tagsById.get(tagFilter)
+      return t ? { name: t.name, icon: t.icon, color: t.color } : null
+    }
+    return null
+  }, [tagFilter, tagsById])
+
+  // Drop a stale tag filter once tags load (the id no longer exists).
+  useEffect(() => {
+    if (typeof tagFilter !== 'number') return
+    if (allTags.length === 0) return
+    if (!tagsById.has(tagFilter)) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('tag')
+      setSearchParams(next, { replace: true })
+    }
+  }, [tagFilter, allTags.length, tagsById, searchParams, setSearchParams])
+
+  // Mutual exclusion: setting one filter always clears the other so the
+  // breakdowns never compose into a confusing AND state.
   const handleSelectCategoryFilter = (id: number) => {
     const next = new URLSearchParams(searchParams)
     next.set('category', String(id))
+    next.delete('tag')
     setSearchParams(next)
     setViewMode('timeline')
   }
   const handleClearCategoryFilter = () => {
     const next = new URLSearchParams(searchParams)
     next.delete('category')
+    setSearchParams(next)
+  }
+  const handleSelectTagFilter = (id: number | 'none') => {
+    const next = new URLSearchParams(searchParams)
+    next.set('tag', id === 'none' ? 'none' : String(id))
+    next.delete('category')
+    setSearchParams(next)
+    setViewMode('timeline')
+  }
+  const handleClearTagFilter = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('tag')
+    setSearchParams(next)
+  }
+  const handleClearAllFilters = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('category')
+    next.delete('tag')
     setSearchParams(next)
   }
   const upsertBudget = useUpsertBudget()
@@ -133,6 +188,7 @@ const ExpensesView = () => {
   const [editingBudgetCategory, setEditingBudgetCategory] = useState<string | null>(null)
   const [showBulkBudgetModal, setShowBulkBudgetModal] = useState(false)
   const [showCategoryManager, setShowCategoryManager] = useState(false)
+  const [showTagManager, setShowTagManager] = useState(false)
 
   const bulkBudgetEntries = useMemo<BudgetBulkEntry[]>(
     () => budgets.map(b => ({
@@ -168,9 +224,12 @@ const ExpensesView = () => {
   }
 
   const timelineExpenses = useMemo(() => {
-    if (categoryFilter === null) return expenses
-    return expenses.filter((e) => e.categoryId === categoryFilter)
-  }, [expenses, categoryFilter])
+    let out = expenses
+    if (categoryFilter !== null) out = out.filter((e) => e.categoryId === categoryFilter)
+    if (tagFilter === 'none') out = out.filter((e) => e.tagId === null)
+    else if (typeof tagFilter === 'number') out = out.filter((e) => e.tagId === tagFilter)
+    return out
+  }, [expenses, categoryFilter, tagFilter])
 
   const groupedExpenses = useMemo(() => {
     const groups: Record<string, Expense[]> = {}
@@ -220,6 +279,34 @@ const ExpensesView = () => {
       .map(([category, data]) => ({ category, ...data }))
       .sort((a, b) => b.total - a.total)
   }, [expenses, budgets])
+
+  // Flat per-tag breakdown for the By Tag tab. Untagged expenses collapse into
+  // a single sentinel row appended at the end so % share-of-wallet adds to 100.
+  const tagBreakdown = useMemo(() => {
+    const accum = new Map<number, { total: number; count: number }>()
+    let untaggedTotal = 0
+    let untaggedCount = 0
+    for (const e of expenses) {
+      if (e.tagId === null) {
+        untaggedTotal += e.amount
+        untaggedCount += 1
+        continue
+      }
+      const prev = accum.get(e.tagId) ?? { total: 0, count: 0 }
+      accum.set(e.tagId, { total: prev.total + e.amount, count: prev.count + 1 })
+    }
+    const rows: Array<{ tag: Tag | null; total: number; count: number }> = []
+    for (const [tagId, stats] of accum) {
+      const tag = tagsById.get(tagId)
+      if (!tag) continue
+      rows.push({ tag, total: stats.total, count: stats.count })
+    }
+    rows.sort((a, b) => b.total - a.total)
+    if (untaggedCount > 0) {
+      rows.push({ tag: null, total: untaggedTotal, count: untaggedCount })
+    }
+    return rows
+  }, [expenses, tagsById])
 
   const tagBreakdownByCategory = useMemo(() => {
     const result: Record<string, { tag: Tag; total: number; count: number }[]> = {}
@@ -307,16 +394,22 @@ const ExpensesView = () => {
       <div className="expenses-view__controls">
         <div className="expenses-view__toggle">
           <button
-            onClick={() => { handleClearCategoryFilter(); setViewMode('timeline'); }}
+            onClick={() => { handleClearAllFilters(); setViewMode('category'); }}
+            className={`expenses-view__toggle-btn${viewMode === 'category' ? ' expenses-view__toggle-btn--active' : ''}`}
+          >
+            By Category
+          </button>
+          <button
+            onClick={() => { handleClearAllFilters(); setViewMode('timeline'); }}
             className={`expenses-view__toggle-btn${viewMode === 'timeline' ? ' expenses-view__toggle-btn--active' : ''}`}
           >
             Timeline
           </button>
           <button
-            onClick={() => { handleClearCategoryFilter(); setViewMode('category'); }}
-            className={`expenses-view__toggle-btn${viewMode === 'category' ? ' expenses-view__toggle-btn--active' : ''}`}
+            onClick={() => { handleClearAllFilters(); setViewMode('tag'); }}
+            className={`expenses-view__toggle-btn${viewMode === 'tag' ? ' expenses-view__toggle-btn--active' : ''}`}
           >
-            By Category
+            By Tag
           </button>
         </div>
 
@@ -329,23 +422,42 @@ const ExpensesView = () => {
         </button>
       </div>
 
-      {filteredCategory && viewMode === 'timeline' && (
+      {viewMode === 'timeline' && (filteredCategory || filteredTagDisplay) && (
         <div className="expenses-view__filter-chip-row">
-          <button
-            type="button"
-            className="expenses-view__filter-chip"
-            onClick={handleClearCategoryFilter}
-            style={{ borderColor: filteredCategory.color }}
-          >
-            <span
-              className="expenses-view__filter-chip-icon"
-              style={{ backgroundColor: filteredCategory.color }}
+          {filteredCategory && (
+            <button
+              type="button"
+              className="expenses-view__filter-chip"
+              onClick={handleClearCategoryFilter}
+              style={{ borderColor: filteredCategory.color }}
             >
-              {filteredCategory.icon}
-            </span>
-            <span className="expenses-view__filter-chip-name">{filteredCategory.name}</span>
-            <span className="expenses-view__filter-chip-close" aria-hidden>×</span>
-          </button>
+              <span
+                className="expenses-view__filter-chip-icon"
+                style={{ backgroundColor: filteredCategory.color }}
+              >
+                {filteredCategory.icon}
+              </span>
+              <span className="expenses-view__filter-chip-name">{filteredCategory.name}</span>
+              <span className="expenses-view__filter-chip-close" aria-hidden>×</span>
+            </button>
+          )}
+          {filteredTagDisplay && (
+            <button
+              type="button"
+              className="expenses-view__filter-chip"
+              onClick={handleClearTagFilter}
+              style={{ borderColor: filteredTagDisplay.color }}
+            >
+              <span
+                className="expenses-view__filter-chip-icon"
+                style={{ backgroundColor: filteredTagDisplay.color }}
+              >
+                {filteredTagDisplay.icon}
+              </span>
+              <span className="expenses-view__filter-chip-name">{filteredTagDisplay.name}</span>
+              <span className="expenses-view__filter-chip-close" aria-hidden>×</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -354,7 +466,7 @@ const ExpensesView = () => {
       <div className="expenses-view__content">
         {isLoading ? (
           <div className="expenses-view__loading">Loading...</div>
-        ) : expenses.length === 0 && !(viewMode === 'category') ? (
+        ) : expenses.length === 0 && viewMode === 'timeline' ? (
           <div className="expenses-view__empty">
             <p className="expenses-view__empty-title">
               No expenses {isCurrentMonth ? 'this month' : `in ${monthName}`}
@@ -364,6 +476,14 @@ const ExpensesView = () => {
             </p>
           </div>
         ) : viewMode === 'timeline' ? (
+          groupedExpenses.length === 0 ? (
+            <div className="expenses-view__empty">
+              <p className="expenses-view__empty-title">
+                {filteredCategory ? `No ${filteredCategory.name} expenses` : filteredTagDisplay ? `No ${filteredTagDisplay.name} expenses` : 'No expenses'}
+                {' '}{isCurrentMonth ? 'this month' : `in ${monthName}`}
+              </p>
+            </div>
+          ) :
           groupedExpenses.map(([date, dayExpenses]) => (
             <div key={date} className="expenses-view__date-group">
               <p className="expenses-view__date-header">{date}</p>
@@ -421,7 +541,7 @@ const ExpensesView = () => {
               </div>
             </div>
           ))
-        ) : (
+        ) : viewMode === 'category' ? (
           <div className="expenses-view__categories">
             <div className="expenses-view__categories-header">
               <span className="expenses-view__categories-title">
@@ -564,6 +684,72 @@ const ExpensesView = () => {
               {categoryBreakdown.length} categor{categoryBreakdown.length === 1 ? 'y' : 'ies'} {isCurrentMonth ? 'this month' : `in ${monthName}`}
             </div>
           </div>
+        ) : (
+          /* By Tag — reuses __category-card / __category-icon / __progress-fill
+             via --cat-color set from the tag color. No budget overlay. */
+          <div className="expenses-view__categories">
+            <div className="expenses-view__categories-header">
+              <span className="expenses-view__categories-title">
+                {tagBreakdown.length > 0 ? 'Tags' : `No tagged expenses ${isCurrentMonth ? 'this month' : `in ${monthName}`}`}
+              </span>
+              <div className="expenses-view__categories-header-actions">
+                <button
+                  className="expenses-view__manage-categories-btn"
+                  onClick={() => setShowTagManager(true)}
+                  type="button"
+                  aria-label="Manage tags"
+                  title="Manage tags"
+                >
+                  ⚙
+                </button>
+              </div>
+            </div>
+            {tagBreakdown.map(({ tag, total, count }) => {
+              const shareOfWallet = totalSpent > 0 ? (total / totalSpent) * 100 : 0
+              const color = tag?.color ?? UNTAGGED_COLOR
+              const icon = tag?.icon ?? UNTAGGED_ICON
+              const name = tag?.name ?? 'Untagged'
+              const filterValue: number | 'none' = tag ? tag.id : 'none'
+              const cardKey = tag ? `tag-${tag.id}` : 'tag-none'
+              return (
+                <div
+                  key={cardKey}
+                  className="expenses-view__category-card"
+                  style={{ ['--cat-color' as string]: color }}
+                >
+                  <button
+                    type="button"
+                    className="expenses-view__category-header"
+                    onClick={() => handleSelectTagFilter(filterValue)}
+                    aria-label={`Show only ${name} in timeline`}
+                  >
+                    <div className="expenses-view__category-icon">{icon}</div>
+                    <div className="expenses-view__category-info">
+                      <div className="expenses-view__category-row">
+                        <p className="expenses-view__category-name">{name}</p>
+                        <p className="expenses-view__category-amount">₪ {total.toFixed(2)}</p>
+                      </div>
+                      <div className="expenses-view__category-row">
+                        <p className="expenses-view__category-count">
+                          {count} expense{count !== 1 ? 's' : ''}
+                        </p>
+                        <p className="expenses-view__category-pct">{shareOfWallet.toFixed(1)}%</p>
+                      </div>
+                    </div>
+                  </button>
+                  <div className="expenses-view__progress-track">
+                    <div
+                      className="expenses-view__progress-fill"
+                      style={{ width: `${shareOfWallet}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+            <div className="expenses-view__category-summary">
+              {tagBreakdown.length} tag{tagBreakdown.length === 1 ? '' : 's'} {isCurrentMonth ? 'this month' : `in ${monthName}`}
+            </div>
+          </div>
         )}
       </div>
 
@@ -624,6 +810,10 @@ const ExpensesView = () => {
 
       {showCategoryManager && (
         <CategoryManageModal onClose={() => setShowCategoryManager(false)} />
+      )}
+
+      {showTagManager && (
+        <TagManageModal initialMode="list" onClose={() => setShowTagManager(false)} />
       )}
     </div>
   )
