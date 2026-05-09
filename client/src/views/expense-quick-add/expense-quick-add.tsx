@@ -353,6 +353,7 @@ const ExpenseQuickAdd = () => {
               icon: selectedCat?.icon ?? '📦',
               color: selectedCat?.color ?? '#6b7280',
             }}
+            onCreated={(tag) => setTagId(tag.id)}
             onClose={() => setSaveAsTagOpen(false)}
           />
         )

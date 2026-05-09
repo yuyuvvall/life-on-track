@@ -11,6 +11,12 @@ export type TagManageModalProps = {
   initialDraft?: Partial<CreateTagRequest>;
   initialEditId?: number;
   onClose: () => void;
+  /**
+   * Fires after a successful create when the modal was opened with an
+   * `initialDraft` (the "Save as tag" affordance from /expense/add).
+   * Lets the parent attach the just-saved tag to the expense in flight.
+   */
+  onCreated?: (tag: Tag) => void;
 };
 
 type FormState = {
@@ -53,6 +59,7 @@ const TagManageModal = ({
   initialDraft,
   initialEditId,
   onClose,
+  onCreated,
 }: TagManageModalProps) => {
   const [mode, setMode] = useState<'list' | 'create' | 'edit'>(initialMode);
   const [editingId, setEditingId] = useState<number | undefined>(initialEditId);
@@ -101,9 +108,13 @@ const TagManageModal = ({
       );
     } else {
       createTag.mutate(payload, {
-        onSuccess: () => {
-          if (initialDraft) onClose();
-          else setMode('list');
+        onSuccess: (newTag) => {
+          if (initialDraft) {
+            onCreated?.(newTag);
+            onClose();
+          } else {
+            setMode('list');
+          }
         },
       });
     }
