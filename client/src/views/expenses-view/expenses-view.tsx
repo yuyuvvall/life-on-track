@@ -12,7 +12,7 @@ import {
   useRemoveBudgetEntirely,
 } from '@/hooks'
 import { showToast } from '@/store/toastStore'
-import { BudgetEditModal, BudgetsBulkModal } from '@/components'
+import { BudgetEditModal, BudgetsBulkModal, RecurringManageModal } from '@/components'
 import type { BudgetBulkChange, BudgetBulkEntry } from '@/components'
 import TagChipRow from '@/components/tag-chip-row'
 import TagManageModal from '@/components/tag-manage-modal'
@@ -190,6 +190,7 @@ const ExpensesView = () => {
   const [showBulkBudgetModal, setShowBulkBudgetModal] = useState(false)
   const [showCategoryManager, setShowCategoryManager] = useState(false)
   const [showTagManager, setShowTagManager] = useState(false)
+  const [showRecurringManager, setShowRecurringManager] = useState(false)
 
   const bulkBudgetEntries = useMemo<BudgetBulkEntry[]>(
     () => budgets.map(b => ({
@@ -413,6 +414,17 @@ const ExpensesView = () => {
             By Tag
           </button>
         </div>
+
+        <button
+          onClick={() => setShowRecurringManager(true)}
+          className="expenses-view__recurring-btn"
+          aria-label="Manage recurring expenses"
+          title="Recurring"
+          type="button"
+        >
+          <span aria-hidden>🔄</span>
+          <span>Recurring</span>
+        </button>
 
         <button
           onClick={() => navigate(isCurrentMonth ? '/expense/add' : `/expense/add?date=${endDate}`)}
@@ -819,6 +831,10 @@ const ExpensesView = () => {
 
       {showTagManager && (
         <TagManageModal initialMode="list" onClose={() => setShowTagManager(false)} />
+      )}
+
+      {showRecurringManager && (
+        <RecurringManageModal onClose={() => setShowRecurringManager(false)} />
       )}
     </div>
   )

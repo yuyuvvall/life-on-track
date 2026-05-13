@@ -10,6 +10,9 @@ export type RecurringOptionsModalProps = {
   onSave: (type: RecurrenceType, day: number) => void
   onTurnOff: () => void
   onCancel: () => void
+  // Editing an existing template can't toggle "recurring or not" — the row only
+  // exists because it's recurring. Hide the Off button in that flow.
+  hideOffOption?: boolean
 }
 
 type TempType = RecurrenceType | 'off'
@@ -21,8 +24,11 @@ const RecurringOptionsModal = ({
   onSave,
   onTurnOff,
   onCancel,
+  hideOffOption = false,
 }: RecurringOptionsModalProps) => {
-  const [tempType, setTempType] = useState<TempType>(isRecurring ? recurrenceType : 'off')
+  const [tempType, setTempType] = useState<TempType>(
+    isRecurring || hideOffOption ? recurrenceType : 'off'
+  )
   const [tempDay, setTempDay] = useState(recurrenceDay)
 
   return (
@@ -38,14 +44,16 @@ const RecurringOptionsModal = ({
 
         <div className="recurring-options-modal__body">
           <div className="recurring-options-modal__type-group">
-            <button
-              onClick={() => setTempType('off')}
-              className={`recurring-options-modal__type-btn${
-                tempType === 'off' ? ' recurring-options-modal__type-btn--active' : ''
-              }`}
-            >
-              Off
-            </button>
+            {!hideOffOption && (
+              <button
+                onClick={() => setTempType('off')}
+                className={`recurring-options-modal__type-btn${
+                  tempType === 'off' ? ' recurring-options-modal__type-btn--active' : ''
+                }`}
+              >
+                Off
+              </button>
+            )}
             <button
               onClick={() => { setTempType('weekly'); setTempDay(0) }}
               className={`recurring-options-modal__type-btn${
