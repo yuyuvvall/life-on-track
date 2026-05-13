@@ -253,16 +253,14 @@ const ExpenseQuickAdd = () => {
         />
       </div>
 
-      {!isEditMode && (
-        <button
-          type="button"
-          className="expense-quick-add__save-as-tag"
-          onClick={() => setSaveAsTagOpen(true)}
-          disabled={parseFloat(amount) <= 0}
-        >
-          💾 Save as tag
-        </button>
-      )}
+      <button
+        type="button"
+        className="expense-quick-add__save-as-tag"
+        onClick={() => setSaveAsTagOpen(true)}
+        disabled={parseFloat(amount) <= 0}
+      >
+        💾 Save as tag
+      </button>
 
       <div className="expense-quick-add__keypad">
         <div className="expense-quick-add__keypad-grid">
