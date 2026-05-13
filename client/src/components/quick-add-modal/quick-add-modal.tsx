@@ -24,17 +24,22 @@ const QuickAddModal = () => {
   const [subtasks, setSubtasks] = useState<string[]>([])
   const [newSubtask, setNewSubtask] = useState('')
 
+  // Depend on the primitive default rather than the `categories` array — while
+  // useCategories() is still loading, the `= []` destructure default creates a
+  // fresh array each render, which combined with `setSubtasks([])` (also a new
+  // reference each call) drove an infinite re-render loop.
+  const defaultExpenseCategory = categories[0]?.name ?? 'Food'
   useEffect(() => {
     if (!quickAdd.isOpen) {
       setAmount('')
-      setExpenseCategory(categories[0]?.name ?? 'Food')
+      setExpenseCategory(defaultExpenseCategory)
       setTaskTitle('')
       setTaskCategory('Personal')
       setTaskDeadline('')
       setSubtasks([])
       setNewSubtask('')
     }
-  }, [quickAdd.isOpen, categories])
+  }, [quickAdd.isOpen, defaultExpenseCategory])
 
   const handleExpenseSubmit = (e: React.FormEvent) => {
     e.preventDefault()

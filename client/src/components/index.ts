@@ -26,4 +26,6 @@ export { BudgetEditModal } from './budget-edit-modal'
 export type { BudgetEditModalProps } from './budget-edit-modal'
 export { BudgetsBulkModal } from './budgets-bulk-modal'
 export type { BudgetsBulkModalProps, BudgetBulkEntry, BudgetBulkChange } from './budgets-bulk-modal'
+export { default as RecurringManageModal } from './recurring-manage-modal'
+export type { RecurringManageModalProps } from './recurring-manage-modal'
 

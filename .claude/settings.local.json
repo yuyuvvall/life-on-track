@@ -17,5 +17,8 @@
       "Bash(npx vitest *)",
       "Bash(npx *)"
     ]
+  },
+  "enabledPlugins": {
+    "ffmpeg-llm@rendi-official": true
   }
 }
