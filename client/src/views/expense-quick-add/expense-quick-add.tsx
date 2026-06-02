@@ -21,6 +21,16 @@ const parseInitialDate = (dateParam: string | null): Date => {
   return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
 }
 
+// Serialize the picked date's local calendar fields into an ISO string
+// *without* converting to UTC. `.toISOString()` would shift a Jun 1 00:00
+// local pick to May 31 21:00 UTC for any UTC+ timezone, and the server's
+// DATE(created_at) would file it under the wrong day.
+const localCalendarToIso = (d: Date): string =>
+  new Date(Date.UTC(
+    d.getFullYear(), d.getMonth(), d.getDate(),
+    d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds()
+  )).toISOString()
+
 const ExpenseQuickAdd = () => {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
@@ -110,7 +120,7 @@ const ExpenseQuickAdd = () => {
             amount: parsedAmount,
             category,
             note: note || undefined,
-            createdAt: selectedDate.toISOString(),
+            createdAt: localCalendarToIso(selectedDate),
             tagId: tagId,
           },
         },
@@ -122,7 +132,7 @@ const ExpenseQuickAdd = () => {
           amount: parsedAmount,
           category,
           note: note || undefined,
-          createdAt: selectedDate.toISOString(),
+          createdAt: localCalendarToIso(selectedDate),
           tagId: tagId ?? undefined,
         },
         { onSuccess: () => navigate(-1) }
