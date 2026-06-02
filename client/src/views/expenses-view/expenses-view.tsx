@@ -73,11 +73,15 @@ const ExpensesView = () => {
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
     const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    // Format from local Y/M/D directly — toISOString() shifts to UTC, which
+    // makes June 1 00:00 in any UTC+ timezone land on May 31 and silently
+    // pulls May-31 expenses into the June range (and drops June 30).
     return {
-      startDate: firstDay.toISOString().split('T')[0],
-      endDate: lastDay.toISOString().split('T')[0],
+      startDate: `${year}-${pad(month + 1)}-01`,
+      endDate: `${year}-${pad(month + 1)}-${pad(lastDay.getDate())}`,
       monthName: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-      monthKey: `${year}-${String(month + 1).padStart(2, '0')}`,
+      monthKey: `${year}-${pad(month + 1)}`,
       isCurrentMonth: year === now.getFullYear() && month === now.getMonth(),
     }
   }, [selectedMonth])

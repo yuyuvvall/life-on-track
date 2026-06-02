@@ -12,6 +12,14 @@ This is a full-stack web application:
 - The backend runs on port 3000 (or as configured in .env)
 - The frontend communicates with the backend via REST API
 
+## Deployment
+- **Frontend:** Vercel — https://life-on-track-client.vercel.app
+- **Backend:** GCE `e2-micro` VM (project `life-on-track-497619`, zone `us-central1-a`, static IP `35.253.176.201`), served at https://life-on-track.duckdns.org via DuckDNS + Let's Encrypt + nginx → node `:3001`. systemd unit: `life-on-track-api`.
+- **Database:** Turso (`libsql://life-track-db-yuyuvvall.aws-eu-west-1.turso.io`).
+- **Deploy:** From PowerShell at repo root — `.\deploy\update-server.ps1` (code only) or `.\deploy\update-server.ps1 -RefreshEnv` (also refreshes env from Google Secret Manager). The bash equivalent `deploy/update-server.sh` is broken in this dev's Git Bash on Windows; use PowerShell.
+- **Full runbook:** [plans/migrate-to-gce-2026-05-27/SUMMARY.md](plans/migrate-to-gce-2026-05-27/SUMMARY.md) — architecture, VM internals, known issues, disaster recovery, hardening TODOs.
+- **Legacy (do not treat as source of truth):** `render.yaml`, `server/railway.json`, `server/Procfile` — leftovers from the pre-GCE setup, scheduled for deletion after the 7-day soak (~2026-06-09).
+
 ## Frontend Patterns
 - Use react-hook-form for all forms
 - Use Bootstrap 5 for layout and styling (vstack, form-control, position utilities)
