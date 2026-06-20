@@ -43,6 +43,7 @@ export function useCreateExpense() {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['weeklySummary'] });
       queryClient.invalidateQueries({ queryKey: ['tags'] });
+      queryClient.invalidateQueries({ queryKey: ['cards'] });
     },
   });
 }
@@ -56,6 +57,7 @@ export function useUpdateExpense() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['weeklySummary'] });
+      queryClient.invalidateQueries({ queryKey: ['cards'] });
     },
   });
 }
@@ -74,7 +76,7 @@ export function useDeleteExpense() {
       );
       qc.removeQueries({ queryKey: ['expenses', id] });
     },
-    invalidateOnSettled: [['weeklySummary']],
+    invalidateOnSettled: [['weeklySummary'], ['cards']],
     errorMessage: 'Could not delete expense',
   });
 }

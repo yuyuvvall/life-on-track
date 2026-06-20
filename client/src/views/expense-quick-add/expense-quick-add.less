@@ -167,6 +167,98 @@
     }
   }
 
+  // Payment source row ----------------------------------------------------
+
+  &__sources {
+    background: @surface-800;
+    padding: @space-2 @space-3;
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+    border-top: 1px solid @surface-700;
+  }
+
+  &__sources-label {
+    color: @gray-500;
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+  }
+
+  &__sources-scroll {
+    display: flex;
+    gap: @space-2;
+    overflow-x: auto;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  &__source-chip {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: @space-1;
+    padding: @space-1 @space-3;
+    border-radius: @radius-full;
+    font-size: 0.8em;
+    background: @surface-700;
+    color: @gray-300;
+    border: 0.125em solid transparent;
+    cursor: pointer;
+    transition: @transition-colors;
+
+    &:hover {
+      background: @surface-600;
+    }
+
+    &--active {
+      background: @surface-600;
+      color: #fff;
+      border-color: @accent-blue;
+    }
+  }
+
+  &__source-balance {
+    color: @accent-green;
+    font-weight: 500;
+  }
+
+  // Card helper / warning -------------------------------------------------
+
+  &__card-helper {
+    margin-top: @space-2;
+    color: @emerald-400;
+    font-size: 0.8em;
+  }
+
+  &__card-warning {
+    margin-top: @space-2;
+    display: inline-flex;
+    align-items: center;
+    gap: @space-2;
+    color: @red-400;
+    font-size: 0.8em;
+  }
+
+  &__load-shortcut {
+    background: @accent-blue;
+    color: #fff;
+    border: none;
+    border-radius: @radius-full;
+    padding: @space-0_5 @space-2;
+    font-size: 0.9em;
+    cursor: pointer;
+
+    &:hover {
+      background: @blue-600;
+    }
+  }
+
   // Amount section --------------------------------------------------------
 
   &__amount-section {

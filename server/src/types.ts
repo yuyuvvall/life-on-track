@@ -35,6 +35,8 @@ export interface ExpenseRow {
   note: string | null;
   created_at: string;
   tag_id: number | null;
+  card_id: number | null;
+  face_amount: number | null;
 }
 
 export interface RecurringExpenseRow {
@@ -82,6 +84,28 @@ export interface CategoryRow {
   sort_order: number;
   is_archived: number;
   is_system: number;
+  created_at: string;
+}
+
+export interface PrepaidCardRow {
+  id: number;
+  name: string;
+  icon: string;
+  color: string;
+  default_discount_rate: number;
+  is_archived: number;
+  created_at: string;
+}
+
+export interface CardLoadRow {
+  id: number;
+  card_id: number;
+  cash_paid: number;
+  face_value: number;
+  discount_rate: number;
+  face_remaining: number;
+  note: string | null;
+  loaded_at: string;
   created_at: string;
 }
 
@@ -141,12 +165,14 @@ export interface WorkLog {
 
 export interface Expense {
   id: number;
-  amount: number;
+  amount: number;          // real money spent (= face × discount factor for card purchases)
   category: string;
   categoryId: number | null;
   note: string | null;
   createdAt: string;
   tagId: number | null;
+  cardId: number | null;   // prepaid card this was paid from, or null for direct/cash
+  faceAmount: number | null; // price tag for card purchases; null for direct expenses
 }
 
 export interface RecurringExpense {
@@ -194,6 +220,32 @@ export interface Category {
   sortOrder: number;
   isArchived: boolean;
   isSystem: boolean;
+  createdAt: string;
+}
+
+export interface PrepaidCard {
+  id: number;
+  name: string;
+  icon: string;
+  color: string;
+  defaultDiscountRate: number;
+  isArchived: boolean;
+  createdAt: string;
+  // Derived from the load ledger (see services/cardLedger.ts)
+  balance: number;
+  realValueRemaining: number;
+  lifetimeSavings: number;
+}
+
+export interface CardLoad {
+  id: number;
+  cardId: number;
+  cashPaid: number;
+  faceValue: number;
+  discountRate: number;
+  faceRemaining: number;
+  note: string | null;
+  loadedAt: string;
   createdAt: string;
 }
 
@@ -291,6 +343,8 @@ export function expenseRowToExpense(row: ExpenseRow): Expense {
     note: row.note,
     createdAt: row.created_at,
     tagId: row.tag_id,
+    cardId: row.card_id ?? null,
+    faceAmount: row.face_amount ?? null,
   };
 }
 
@@ -346,6 +400,20 @@ export function categoryRowToCategory(row: CategoryRow): Category {
     sortOrder: row.sort_order,
     isArchived: Boolean(row.is_archived),
     isSystem: Boolean(row.is_system),
+    createdAt: row.created_at,
+  };
+}
+
+export function cardLoadRowToCardLoad(row: CardLoadRow): CardLoad {
+  return {
+    id: row.id,
+    cardId: row.card_id,
+    cashPaid: row.cash_paid,
+    faceValue: row.face_value,
+    discountRate: row.discount_rate,
+    faceRemaining: row.face_remaining,
+    note: row.note,
+    loadedAt: row.loaded_at,
     createdAt: row.created_at,
   };
 }

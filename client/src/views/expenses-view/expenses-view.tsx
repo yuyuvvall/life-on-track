@@ -12,15 +12,16 @@ import {
   useRemoveBudgetEntirely,
 } from '@/hooks'
 import { showToast } from '@/store/toastStore'
-import { BudgetEditModal, BudgetsBulkModal, RecurringManageModal } from '@/components'
+import { BudgetEditModal, BudgetsBulkModal, RecurringManageModal, CardManageModal, CardDetailModal } from '@/components'
 import type { BudgetBulkChange, BudgetBulkEntry } from '@/components'
 import TagChipRow from '@/components/tag-chip-row'
 import TagManageModal from '@/components/tag-manage-modal'
 import CategoryManageModal from '@/components/category-manage-modal/category-manage-modal'
 import { useTags } from '@/hooks/useTags'
 import { useCategories } from '@/hooks/useCategories'
+import { useCards } from '@/hooks/useCards'
 import { formatCurrency } from '@/utils/currency'
-import type { Category, Expense, Tag } from '@/types'
+import type { Category, Expense, PrepaidCard, Tag } from '@/types'
 import './expenses-view.less'
 
 const FALLBACK_ICON = '📦'
@@ -90,6 +91,12 @@ const ExpensesView = () => {
   const { data: budgets = [] } = useBudgetsByMonth(monthKey)
   const { data: allTags = [] } = useTags(true)
   const { data: allCategories = [] } = useCategories(true)
+  const { data: cards = [] } = useCards()
+  const cardsById = useMemo(() => {
+    const map = new Map<number, PrepaidCard>()
+    for (const c of cards) map.set(c.id, c)
+    return map
+  }, [cards])
   const tagsById = useMemo(() => {
     const map = new Map<number, Tag>()
     for (const t of allTags) map.set(t.id, t)
@@ -195,6 +202,8 @@ const ExpensesView = () => {
   const [showCategoryManager, setShowCategoryManager] = useState(false)
   const [showTagManager, setShowTagManager] = useState(false)
   const [showRecurringManager, setShowRecurringManager] = useState(false)
+  const [showCardManager, setShowCardManager] = useState(false)
+  const [detailCardId, setDetailCardId] = useState<number | null>(null)
 
   const bulkBudgetEntries = useMemo<BudgetBulkEntry[]>(
     () => budgets.map(b => ({
@@ -397,6 +406,29 @@ const ExpensesView = () => {
         </p>
       </div>
 
+      <div className="expenses-view__cards-strip">
+        {cards.map((card) => (
+          <button
+            key={card.id}
+            type="button"
+            className="expenses-view__card-chip"
+            onClick={() => setDetailCardId(card.id)}
+            style={{ borderColor: card.color }}
+          >
+            <span className="expenses-view__card-chip-icon">{card.icon}</span>
+            <span className="expenses-view__card-chip-name">{card.name}</span>
+            <span className="expenses-view__card-chip-balance">{formatCurrency(card.balance)}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          className="expenses-view__manage-cards-btn"
+          onClick={() => setShowCardManager(true)}
+        >
+          💳 Manage cards
+        </button>
+      </div>
+
       <div className="expenses-view__controls">
         <div className="expenses-view__toggle">
           <button
@@ -542,7 +574,22 @@ const ExpensesView = () => {
                       <p className="expenses-view__expense-time">{formatTime(expense.createdAt)}</p>
                     </div>
                     <div className="expenses-view__expense-amount">
-                      <p>{formatCurrency(expense.amount, { space: true })}</p>
+                      {expense.cardId !== null && expense.faceAmount !== null ? (
+                        <p className="expenses-view__expense-amount-card">
+                          {cardsById.has(expense.cardId) && (
+                            <span className="expenses-view__expense-card-icon" aria-hidden>
+                              {cardsById.get(expense.cardId)!.icon}
+                            </span>
+                          )}
+                          <span className="expenses-view__expense-amount-face">
+                            {formatCurrency(expense.faceAmount)}
+                          </span>
+                          <span className="expenses-view__expense-amount-arrow" aria-hidden>→</span>
+                          <span>{formatCurrency(expense.amount)}</span>
+                        </p>
+                      ) : (
+                        <p>{formatCurrency(expense.amount, { space: true })}</p>
+                      )}
                     </div>
                     <button
                       onClick={(e) => handleDelete(e, expense)}
@@ -839,6 +886,14 @@ const ExpensesView = () => {
 
       {showRecurringManager && (
         <RecurringManageModal onClose={() => setShowRecurringManager(false)} />
+      )}
+
+      {showCardManager && (
+        <CardManageModal onClose={() => setShowCardManager(false)} />
+      )}
+
+      {detailCardId !== null && (
+        <CardDetailModal cardId={detailCardId} onClose={() => setDetailCardId(null)} />
       )}
     </div>
   )

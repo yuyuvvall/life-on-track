@@ -151,6 +151,40 @@ CREATE TABLE IF NOT EXISTS categories (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 5e. Prepaid Cards (load up-front, spend like a credit card, often at a discount)
+CREATE TABLE IF NOT EXISTS prepaid_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    icon TEXT NOT NULL,
+    color TEXT NOT NULL,
+    default_discount_rate REAL NOT NULL DEFAULT 0,
+    is_archived INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5f. Card Loads (one tranche per top-up; balance is derived from these rows)
+CREATE TABLE IF NOT EXISTS card_loads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id INTEGER NOT NULL REFERENCES prepaid_cards(id),
+    cash_paid REAL NOT NULL CHECK (cash_paid >= 0),
+    face_value REAL NOT NULL CHECK (face_value > 0),
+    discount_rate REAL NOT NULL,
+    face_remaining REAL NOT NULL,
+    note TEXT,
+    loaded_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5g. Card Payment Allocations (which tranche(s) each card expense drew from; for FIFO + clean reversal)
+CREATE TABLE IF NOT EXISTS card_payment_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    expense_id INTEGER NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+    load_id INTEGER NOT NULL REFERENCES card_loads(id),
+    face_consumed REAL NOT NULL,
+    real_cost REAL NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 6. Weekly Reflections
 CREATE TABLE IF NOT EXISTS weekly_reflections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -170,6 +204,10 @@ CREATE INDEX IF NOT EXISTS idx_recurring_expenses_active ON recurring_expenses(i
 CREATE INDEX IF NOT EXISTS idx_category_budgets_month ON category_budgets(month);
 CREATE INDEX IF NOT EXISTS idx_expense_tags_archived ON expense_tags(is_archived);
 CREATE INDEX IF NOT EXISTS idx_categories_archived ON categories(is_archived, sort_order);
+CREATE INDEX IF NOT EXISTS idx_prepaid_cards_archived ON prepaid_cards(is_archived);
+CREATE INDEX IF NOT EXISTS idx_card_loads_card ON card_loads(card_id, loaded_at);
+CREATE INDEX IF NOT EXISTS idx_card_alloc_expense ON card_payment_allocations(expense_id);
+CREATE INDEX IF NOT EXISTS idx_card_alloc_load ON card_payment_allocations(load_id);
 `;
 
 // Initialize schema on startup
@@ -233,6 +271,14 @@ async function initializeDatabase() {
   try { await db.execute('ALTER TABLE recurring_expenses ADD COLUMN category_id INTEGER REFERENCES categories(id)'); console.log('[Database] Added category_id to recurring_expenses'); } catch {}
   try { await db.execute('ALTER TABLE category_budgets ADD COLUMN category_id INTEGER REFERENCES categories(id)'); console.log('[Database] Added category_id to category_budgets'); } catch {}
   try { await db.execute('ALTER TABLE expense_tags ADD COLUMN category_id INTEGER REFERENCES categories(id)'); console.log('[Database] Added category_id to expense_tags'); } catch {}
+
+  // Migration: prepaid-card support on expenses.
+  //   card_id    — which prepaid card paid for this expense (NULL = direct/cash)
+  //   face_amount — the price tag for a card purchase; `amount` always stays the
+  //                 real (discounted) money spent so every existing report is correct.
+  try { await db.execute('ALTER TABLE expenses ADD COLUMN card_id INTEGER REFERENCES prepaid_cards(id)'); console.log('[Database] Added card_id to expenses'); } catch {}
+  try { await db.execute('ALTER TABLE expenses ADD COLUMN face_amount REAL'); console.log('[Database] Added face_amount to expenses'); } catch {}
+  try { await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_card ON expenses(card_id)'); } catch {}
 
   await seedAndBackfillCategories();
 }
