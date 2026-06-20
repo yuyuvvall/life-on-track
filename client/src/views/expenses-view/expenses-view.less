@@ -590,3 +590,77 @@
     text-align: center;
   }
 }
+
+/* ── Prepaid cards strip + card-paid expense rows ───────────────────────────── */
+.expenses-view {
+  &__cards-strip {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+    padding: @space-3 @space-4 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+
+    &::-webkit-scrollbar { display: none; }
+  }
+
+  &__card-chip {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: @space-1_5;
+    padding: @space-1_5 @space-3;
+    background: @surface-700;
+    border: 1px solid @surface-500;
+    border-left-width: 3px;
+    border-radius: @radius-lg;
+    color: @gray-200;
+    cursor: pointer;
+    font-size: 0.875em;
+    line-height: 1.2;
+    white-space: nowrap;
+
+    &:hover { background: @surface-600; }
+  }
+
+  &__card-chip-icon { font-size: 1.1em; }
+
+  &__card-chip-name { color: @gray-300; }
+
+  &__card-chip-balance {
+    color: @emerald-400;
+    font-weight: 600;
+  }
+
+  &__manage-cards-btn {
+    flex: 0 0 auto;
+    padding: @space-1_5 @space-3;
+    background: transparent;
+    border: 1px dashed @surface-500;
+    border-radius: @radius-lg;
+    color: @gray-400;
+    cursor: pointer;
+    font-size: 0.8125em;
+    white-space: nowrap;
+
+    &:hover { color: @gray-200; border-color: @gray-500; }
+  }
+
+  &__expense-amount-card {
+    display: inline-flex;
+    align-items: center;
+    gap: @space-1;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  &__expense-card-icon { font-size: 0.9em; }
+
+  &__expense-amount-face {
+    color: @gray-500;
+    text-decoration: line-through;
+    font-size: 0.85em;
+  }
+
+  &__expense-amount-arrow { color: @gray-500; font-size: 0.85em; }
+}

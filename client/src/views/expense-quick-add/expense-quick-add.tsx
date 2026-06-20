@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCreateExpense, useUpdateExpense, useExpense, useCreateRecurringExpense } from '@/hooks'
 import { useCategories } from '@/hooks/useCategories'
-import { CURRENCY_SYMBOL } from '@/utils/currency'
+import { useCards } from '@/hooks/useCards'
+import { CURRENCY_SYMBOL, formatCurrency } from '@/utils/currency'
+import { estimateCardCost } from '@/utils/cardMath'
 import { WEEK_DAY_NAMES } from '@/utils/dateConstants'
 import type { RecurrenceType } from '@/types'
 import KeypadButton from './keypad-button'
@@ -10,6 +12,7 @@ import RecurringOptionsModal from './recurring-options-modal'
 import DatePickerModal from './date-picker-modal'
 import TagChipRow from '@/components/tag-chip-row'
 import TagManageModal from '@/components/tag-manage-modal'
+import CardLoadModal from '@/components/card-load-modal'
 import './expense-quick-add.less'
 
 const parseInitialDate = (dateParam: string | null): Date => {
@@ -20,6 +23,16 @@ const parseInitialDate = (dateParam: string | null): Date => {
   // per-day ordering stays sensible.
   return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds())
 }
+
+// Serialize the picked date's local calendar fields into an ISO string
+// *without* converting to UTC. `.toISOString()` would shift a Jun 1 00:00
+// local pick to May 31 21:00 UTC for any UTC+ timezone, and the server's
+// DATE(created_at) would file it under the wrong day.
+const localCalendarToIso = (d: Date): string =>
+  new Date(Date.UTC(
+    d.getFullYear(), d.getMonth(), d.getDate(),
+    d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds()
+  )).toISOString()
 
 const ExpenseQuickAdd = () => {
   const navigate = useNavigate()
@@ -33,11 +46,14 @@ const ExpenseQuickAdd = () => {
   const createRecurringExpense = useCreateRecurringExpense()
   const { data: existingExpense, isLoading: isLoadingExpense } = useExpense(expenseId)
   const { data: categories = [] } = useCategories()
+  const { data: cards = [] } = useCards()
 
   const [amount, setAmount] = useState('0')
   const [category, setCategory] = useState<string>('Food')
   const [note, setNote] = useState('')
   const [tagId, setTagId] = useState<number | null>(null)
+  const [cardId, setCardId] = useState<number | null>(null)
+  const [showLoadModal, setShowLoadModal] = useState(false)
   const [selectedDate, setSelectedDate] = useState(() => parseInitialDate(searchParams.get('date')))
   const [showDatePicker, setShowDatePicker] = useState(false)
 
@@ -50,11 +66,18 @@ const ExpenseQuickAdd = () => {
 
   useEffect(() => {
     if (existingExpense) {
-      setAmount(existingExpense.amount.toString())
+      // For a card purchase the keypad shows the price tag (faceAmount), not the
+      // discounted real cost stored in amount. Direct expenses have no faceAmount.
+      const tag =
+        existingExpense.cardId !== null && existingExpense.faceAmount !== null
+          ? existingExpense.faceAmount
+          : existingExpense.amount
+      setAmount(tag.toString())
       setCategory(existingExpense.category)
       setNote(existingExpense.note || '')
       setSelectedDate(new Date(existingExpense.createdAt))
       setTagId(existingExpense.tagId)
+      setCardId(existingExpense.cardId)
     }
   }, [existingExpense])
 
@@ -67,6 +90,21 @@ const ExpenseQuickAdd = () => {
   }, [categories, existingExpense, category])
 
   const isPending = createExpense.isPending || updateExpense.isPending || createRecurringExpense.isPending
+
+  // Payment source. When a card is picked the typed amount is the PRICE TAG (face
+  // value); the server computes the exact discounted real cost via FIFO. The
+  // helper line below is a display estimate from the card's default rate.
+  const selectedCard = cardId !== null ? cards.find((c) => c.id === cardId) ?? null : null
+  const parsedAmount = parseFloat(amount)
+  const faceAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0
+  const cardEstimate = selectedCard ? estimateCardCost(faceAmount, selectedCard.defaultDiscountRate) : null
+  const overBalance = selectedCard !== null && faceAmount > selectedCard.balance
+  const overBy = overBalance && selectedCard ? faceAmount - selectedCard.balance : 0
+
+  // Recurring is direct-only (out of scope for cards). Selecting a card clears it.
+  useEffect(() => {
+    if (cardId !== null && isRecurring) setIsRecurring(false)
+  }, [cardId, isRecurring])
 
   const handleKeyPress = (key: string) => {
     if (key === 'backspace') {
@@ -87,8 +125,9 @@ const ExpenseQuickAdd = () => {
   }
 
   const handleSubmit = () => {
-    const parsedAmount = parseFloat(amount)
     if (isNaN(parsedAmount) || parsedAmount <= 0) return
+    // Block spending past the card balance — the server would reject it anyway.
+    if (overBalance) return
 
     if (isRecurring && !isEditMode) {
       createRecurringExpense.mutate(
@@ -110,8 +149,9 @@ const ExpenseQuickAdd = () => {
             amount: parsedAmount,
             category,
             note: note || undefined,
-            createdAt: selectedDate.toISOString(),
+            createdAt: localCalendarToIso(selectedDate),
             tagId: tagId,
+            cardId: cardId,
           },
         },
         { onSuccess: () => navigate(-1) }
@@ -122,8 +162,9 @@ const ExpenseQuickAdd = () => {
           amount: parsedAmount,
           category,
           note: note || undefined,
-          createdAt: selectedDate.toISOString(),
+          createdAt: localCalendarToIso(selectedDate),
           tagId: tagId ?? undefined,
+          cardId: cardId ?? undefined,
         },
         { onSuccess: () => navigate(-1) }
       )
@@ -169,7 +210,7 @@ const ExpenseQuickAdd = () => {
           {isEditMode ? 'Edit Expense' : 'Add Expense'}
         </h1>
         <div className="expense-quick-add__header-actions">
-          {!isEditMode && (
+          {!isEditMode && cardId === null && (
             <button
               type="button"
               onClick={() => setShowRecurringOptions(true)}
@@ -222,6 +263,37 @@ const ExpenseQuickAdd = () => {
         </div>
       </div>
 
+      <div className="expense-quick-add__sources">
+        <span className="expense-quick-add__sources-label">Pay with</span>
+        <div className="expense-quick-add__sources-scroll">
+          <button
+            type="button"
+            onClick={() => setCardId(null)}
+            className={`expense-quick-add__source-chip${
+              cardId === null ? ' expense-quick-add__source-chip--active' : ''
+            }`}
+          >
+            Direct
+          </button>
+          {cards.map((card) => (
+            <button
+              key={card.id}
+              type="button"
+              onClick={() => setCardId(card.id)}
+              className={`expense-quick-add__source-chip${
+                cardId === card.id ? ' expense-quick-add__source-chip--active' : ''
+              }`}
+              style={cardId === card.id ? { borderColor: card.color } : undefined}
+            >
+              <span aria-hidden>{card.icon}</span> {card.name}{' '}
+              <span className="expense-quick-add__source-balance">
+                {formatCurrency(card.balance)}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <TagChipRow
         mode="prefill"
         selectedTagId={tagId}
@@ -244,6 +316,29 @@ const ExpenseQuickAdd = () => {
         <p className="expense-quick-add__amount-display">
           <span className="expense-quick-add__currency">{CURRENCY_SYMBOL}</span> {amount}
         </p>
+        {selectedCard && (
+          overBalance ? (
+            <div className="expense-quick-add__card-warning">
+              <span>
+                Exceeds {selectedCard.name} balance by {formatCurrency(overBy)}
+              </span>
+              <button
+                type="button"
+                className="expense-quick-add__load-shortcut"
+                onClick={() => setShowLoadModal(true)}
+              >
+                Load card
+              </button>
+            </div>
+          ) : (
+            cardEstimate && (
+              <p className="expense-quick-add__card-helper">
+                real cost {formatCurrency(cardEstimate.realCost)} · saved{' '}
+                {formatCurrency(cardEstimate.saved)} ({Math.round(selectedCard.defaultDiscountRate * 100)}%)
+              </p>
+            )
+          )
+        )}
         <input
           type="text"
           value={note}
@@ -286,7 +381,7 @@ const ExpenseQuickAdd = () => {
           <KeypadButton label="3" onClick={() => handleKeyPress('3')} />
           <button
             onClick={handleSubmit}
-            disabled={isPending || parseFloat(amount) <= 0}
+            disabled={isPending || parseFloat(amount) <= 0 || overBalance}
             className="expense-quick-add__submit-key"
           >
             {isPending ? (
@@ -357,6 +452,10 @@ const ExpenseQuickAdd = () => {
           />
         )
       })()}
+
+      {showLoadModal && selectedCard && (
+        <CardLoadModal card={selectedCard} onClose={() => setShowLoadModal(false)} />
+      )}
     </div>
   )
 }

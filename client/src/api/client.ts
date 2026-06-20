@@ -12,6 +12,14 @@ import type {
   UpdateCategoryRequest,
   CreateTagRequest,
   UpdateTagRequest,
+  PrepaidCard,
+  PrepaidCardWithDependents,
+  CardLoad,
+  CardActivityItem,
+  CreateCardRequest,
+  UpdateCardRequest,
+  CreateCardLoadRequest,
+  CreateCardLoadResponse,
   Goal,
   GoalLog,
   GoalStats,
@@ -318,6 +326,59 @@ export const tagsApi = {
 
   delete: (id: number, purpose?: string) =>
     request<void>(`/tags/${id}`, { method: 'DELETE', purpose }),
+};
+
+// Prepaid Cards API
+export const cardsApi = {
+  getAll: (includeArchived?: boolean, purpose?: string) =>
+    request<PrepaidCard[]>(
+      includeArchived ? '/cards?includeArchived=1' : '/cards',
+      { purpose },
+    ),
+
+  getById: (id: number, purpose?: string) =>
+    request<PrepaidCardWithDependents>(`/cards/${id}`, { purpose }),
+
+  create: (data: CreateCardRequest, purpose?: string) =>
+    request<PrepaidCard>('/cards', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+
+  update: (id: number, data: UpdateCardRequest, purpose?: string) =>
+    request<PrepaidCard>(`/cards/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+
+  delete: (id: number, purpose?: string) =>
+    request<void>(`/cards/${id}`, { method: 'DELETE', purpose }),
+
+  // Loads
+  getLoads: (cardId: number, purpose?: string) =>
+    request<CardLoad[]>(`/cards/${cardId}/loads`, { purpose }),
+
+  createLoad: (cardId: number, data: CreateCardLoadRequest, purpose?: string) =>
+    request<CreateCardLoadResponse>(`/cards/${cardId}/loads`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+
+  updateLoad: (cardId: number, loadId: number, data: Partial<CreateCardLoadRequest>, purpose?: string) =>
+    request<CardLoad>(`/cards/${cardId}/loads/${loadId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+
+  deleteLoad: (cardId: number, loadId: number, purpose?: string) =>
+    request<void>(`/cards/${cardId}/loads/${loadId}`, { method: 'DELETE', purpose }),
+
+  getActivity: (cardId: number, purpose?: string) =>
+    request<CardActivityItem[]>(`/cards/${cardId}/activity`, { purpose }),
 };
 
 // Goals API

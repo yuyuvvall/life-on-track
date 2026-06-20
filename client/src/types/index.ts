@@ -29,12 +29,14 @@ export interface WorkLog {
 
 export interface Expense {
   id: number;
-  amount: number;
+  amount: number;            // real money spent (discounted for card purchases)
   category: string;
   categoryId: number | null;
   note: string | null;
   createdAt: string;
   tagId: number | null;
+  cardId: number | null;     // prepaid card this was paid from, or null for direct/cash
+  faceAmount: number | null; // price tag for card purchases; null for direct expenses
 }
 
 export type RecurrenceType = 'weekly' | 'monthly';
@@ -136,6 +138,89 @@ export interface UpdateTagRequest {
   isArchived?: boolean;
 }
 
+// Prepaid cards: loaded up-front (often at a discount), then spent like a credit card.
+export interface PrepaidCard {
+  id: number;
+  name: string;
+  icon: string;
+  color: string;
+  defaultDiscountRate: number;     // 0.30 = 30% off
+  isArchived: boolean;
+  createdAt: string;
+  balance: number;                 // face value still spendable
+  realValueRemaining: number;      // prepaid cash still on the card
+  lifetimeSavings: number;         // total face loaded − total cash paid
+}
+
+export interface PrepaidCardDependents {
+  loads: number;
+  payments: number;
+}
+
+export interface PrepaidCardWithDependents extends PrepaidCard {
+  dependents: PrepaidCardDependents;
+}
+
+export interface CardLoad {
+  id: number;
+  cardId: number;
+  cashPaid: number;
+  faceValue: number;
+  discountRate: number;
+  faceRemaining: number;
+  note: string | null;
+  loadedAt: string;
+  createdAt: string;
+}
+
+export interface CreateCardRequest {
+  name: string;
+  icon: string;
+  color: string;
+  defaultDiscountRate?: number;
+}
+
+export interface UpdateCardRequest {
+  name?: string;
+  icon?: string;
+  color?: string;
+  defaultDiscountRate?: number;
+  isArchived?: boolean;
+}
+
+export interface CreateCardLoadRequest {
+  cashPaid: number;
+  discountRate?: number;   // defaults to the card default
+  faceValue?: number;      // optional explicit balance received; overrides the rate
+  loadedAt?: string;
+  note?: string;
+}
+
+export interface CreateCardLoadResponse {
+  load: CardLoad;
+  card: PrepaidCard | null;
+}
+
+export type CardActivityItem =
+  | {
+      type: 'load';
+      id: number;
+      at: string;
+      cashPaid: number;
+      faceValue: number;
+      discountRate: number;
+      note: string | null;
+    }
+  | {
+      type: 'payment';
+      id: number;
+      at: string;
+      amount: number;
+      faceAmount: number | null;
+      category: string | null;
+      note: string | null;
+    };
+
 export type GoalType = 'reading' | 'frequency' | 'numeric';
 export type FrequencyPeriod = 'daily' | 'weekly' | 'monthly';
 
@@ -224,19 +309,21 @@ export interface CreateWorkLogRequest {
 }
 
 export interface CreateExpenseRequest {
-  amount: number;
+  amount: number;        // price tag (face value) when cardId is set; real amount otherwise
   category: string;
   note?: string;
   createdAt?: string;
   tagId?: number | null;
+  cardId?: number | null;
 }
 
 export interface UpdateExpenseRequest {
-  amount?: number;
+  amount?: number;       // price tag (face value) when the expense is paid from a card
   category?: string;
   note?: string;
   createdAt?: string;
   tagId?: number | null;
+  cardId?: number | null;
 }
 
 export interface CreateRecurringExpenseRequest {

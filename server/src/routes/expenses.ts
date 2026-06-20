@@ -1,10 +1,48 @@
 import { Router } from 'express';
 import type { InValue } from '@libsql/client';
-import { trackedExecute, resolveCategoryId } from '../db/index.js';
-import type { ExpenseRow } from '../types.js';
+import db, { trackedExecute, resolveCategoryId } from '../db/index.js';
+import type { ExpenseRow, PrepaidCardRow } from '../types.js';
 import { expenseRowToExpense } from '../types.js';
+import {
+  planAllocation,
+  planAllocationFromTranches,
+  applyAllocationStatements,
+  reverseStatements,
+  buildReversalStatements,
+  getAllocations,
+  getTranches,
+  round2,
+} from '../services/cardLedger.js';
 
 const router = Router();
+
+// Shared projection so every read returns the full expense shape, including the
+// prepaid-card columns. `amount` is always the real money spent; `face_amount`
+// holds the price tag for card purchases (NULL for direct/cash expenses).
+const EXPENSE_COLUMNS =
+  'expenses.id, expenses.amount, expenses.category_id, expenses.note, ' +
+  'expenses.created_at, expenses.tag_id, expenses.card_id, expenses.face_amount, c.name AS category';
+
+async function loadExpenseById(id: number | string): Promise<ExpenseRow | undefined> {
+  const result = await trackedExecute({
+    sql: `SELECT ${EXPENSE_COLUMNS}
+          FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
+          WHERE expenses.id = ?`,
+    args: [id],
+  }, 'getExpenseById');
+  return result.rows[0] as unknown as ExpenseRow | undefined;
+}
+
+/** Validate that a card exists and is active. Returns the row or null. */
+async function loadActiveCard(cardId: number): Promise<PrepaidCardRow | null> {
+  const result = await trackedExecute(
+    { sql: 'SELECT * FROM prepaid_cards WHERE id = ?', args: [cardId] },
+    'validateCardOnExpense',
+  );
+  const row = result.rows[0] as unknown as PrepaidCardRow | undefined;
+  if (!row || row.is_archived === 1) return null;
+  return row;
+}
 
 /**
  * @swagger
@@ -60,7 +98,7 @@ router.get('/', async (req, res) => {
     }
 
     const sql =
-      'SELECT expenses.id, expenses.amount, expenses.category_id, expenses.note, expenses.created_at, expenses.tag_id, c.name AS category ' +
+      `SELECT ${EXPENSE_COLUMNS} ` +
       'FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id' +
       (where.length ? ` WHERE ${where.map((w) => w.replace(/category_id/g, 'expenses.category_id').replace(/created_at/g, 'expenses.created_at')).join(' AND ')}` : '') +
       ' ORDER BY expenses.created_at DESC';
@@ -101,19 +139,10 @@ router.get('/', async (req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
-    const result = await trackedExecute({
-      sql: `SELECT expenses.id, expenses.amount, expenses.category_id, expenses.note,
-                   expenses.created_at, expenses.tag_id, c.name AS category
-            FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
-            WHERE expenses.id = ?`,
-      args: [req.params.id]
-    }, 'getExpenseById');
-
-    if (result.rows.length === 0) {
+    const expense = await loadExpenseById(req.params.id);
+    if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
-
-    const expense = result.rows[0] as unknown as ExpenseRow;
     res.json(expenseRowToExpense(expense));
   } catch (err) {
     res.status(500).json({ message: (err as Error).message });
@@ -144,7 +173,7 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { amount, category, note, createdAt, tagId } = req.body;
+    const { amount, category, note, createdAt, tagId, cardId } = req.body;
 
     if (amount === undefined || amount === null) {
       return res.status(400).json({ message: 'Amount is required' });
@@ -170,15 +199,51 @@ router.post('/', async (req, res) => {
       resolvedTagId = tagId;
     }
 
+    // When paid from a prepaid card, the incoming `amount` is the price tag
+    // (face value). We draw it down the card's tranches (FIFO) and store the
+    // discounted real cost as `amount`, keeping the price tag in `face_amount`.
+    let storedAmount = amount;
+    let faceAmount: number | null = null;
+    let resolvedCardId: number | null = null;
+    let pendingAllocations: { loadId: number; faceConsumed: number; realCost: number }[] = [];
+    if (cardId !== undefined && cardId !== null) {
+      if (!Number.isInteger(cardId)) {
+        return res.status(400).json({ message: 'cardId must be an integer' });
+      }
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({ message: 'A card purchase amount must be a positive number' });
+      }
+      const card = await loadActiveCard(cardId);
+      if (!card) {
+        return res.status(400).json({ message: 'Invalid or archived cardId' });
+      }
+      const plan = await planAllocation(cardId, amount);
+      if (!plan.ok) {
+        const shortfall = Math.round((amount - plan.balance) * 100) / 100;
+        return res.status(400).json({ message: `Amount exceeds card balance by ${shortfall}` });
+      }
+      faceAmount = amount;
+      storedAmount = plan.realCost;
+      resolvedCardId = cardId;
+      pendingAllocations = plan.allocations;
+    }
+
     // Use provided date or default to now
     const timestamp = createdAt || new Date().toISOString();
 
     const categoryId = await resolveCategoryId(category);
 
     const result = await trackedExecute({
-      sql: 'INSERT INTO expenses (amount, category_id, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?)',
-      args: [amount, categoryId, note || null, timestamp, resolvedTagId]
+      sql: 'INSERT INTO expenses (amount, category_id, note, created_at, tag_id, card_id, face_amount) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      args: [storedAmount, categoryId, note || null, timestamp, resolvedTagId, resolvedCardId, faceAmount]
     }, 'createExpense');
+
+    const expenseId = Number(result.lastInsertRowid);
+
+    // Draw down the card tranches and record which load(s) this purchase consumed.
+    if (resolvedCardId !== null && pendingAllocations.length > 0) {
+      await db.batch(applyAllocationStatements(expenseId, pendingAllocations), 'write');
+    }
 
     if (resolvedTagId !== null) {
       // Best-effort; never fail the request on this.
@@ -188,16 +253,8 @@ router.post('/', async (req, res) => {
       ).catch(() => {});
     }
 
-    const expenseResult = await trackedExecute({
-      sql: `SELECT expenses.id, expenses.amount, expenses.category_id, expenses.note,
-                   expenses.created_at, expenses.tag_id, c.name AS category
-            FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
-            WHERE expenses.id = ?`,
-      args: [Number(result.lastInsertRowid)]
-    }, 'getCreatedExpense');
-    const expense = expenseResult.rows[0] as unknown as ExpenseRow;
-
-    res.status(201).json(expenseRowToExpense(expense));
+    const expense = await loadExpenseById(expenseId);
+    res.status(201).json(expenseRowToExpense(expense as ExpenseRow));
   } catch (err) {
     res.status(500).json({ message: (err as Error).message });
   }
@@ -246,16 +303,20 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { amount, category, note, createdAt, tagId } = req.body;
+    const numericId = Number(id);
+    const { amount, category, note, createdAt, tagId, cardId } = req.body;
 
-    // Build dynamic update query
+    const existing = await loadExpenseById(id);
+    if (!existing) {
+      return res.status(404).json({ message: 'Expense not found' });
+    }
+
+    // Build the expense-row updates plus any ledger statements (reversal of old
+    // allocations and application of new ones) so the whole edit is one atomic batch.
     const updates: string[] = [];
     const args: InValue[] = [];
+    const ledgerStatements: { sql: string; args: InValue[] }[] = [];
 
-    if (amount !== undefined) {
-      updates.push('amount = ?');
-      args.push(amount);
-    }
     if (category !== undefined) {
       const newCategoryId = await resolveCategoryId(category);
       updates.push('category_id = ?');
@@ -290,20 +351,78 @@ router.put('/:id', async (req, res) => {
       args.push(tagId);
     }
 
+    // ── Card / amount handling ────────────────────────────────────────────────
+    const cardInBody = cardId !== undefined;
+    if (cardInBody && cardId !== null && !Number.isInteger(cardId)) {
+      return res.status(400).json({ message: 'cardId must be an integer or null' });
+    }
+    const effectiveCardId: number | null = cardInBody ? (cardId === null ? null : cardId) : existing.card_id;
+    const amountInBody = amount !== undefined;
+    const wasCard = existing.card_id != null;
+    const willBeCard = effectiveCardId != null;
+    const cardChanged = cardInBody && (cardId ?? null) !== (existing.card_id ?? null);
+    const needsRealloc = (willBeCard && (amountInBody || cardChanged)) || (wasCard && !willBeCard);
+
+    if (needsRealloc) {
+      const origAllocs = await getAllocations(numericId);
+
+      if (willBeCard) {
+        const card = await loadActiveCard(effectiveCardId as number);
+        if (!card) {
+          return res.status(400).json({ message: 'Invalid or archived cardId' });
+        }
+        // The face value to (re)allocate: the new price tag if given, otherwise
+        // keep the existing one (or, for a direct→card switch, the old amount).
+        const newFace = amountInBody ? amount : (existing.face_amount ?? existing.amount);
+        if (typeof newFace !== 'number' || !Number.isFinite(newFace) || newFace <= 0) {
+          return res.status(400).json({ message: 'A card purchase amount must be a positive number' });
+        }
+
+        // Plan against the destination card's tranches. When we're re-allocating
+        // on the SAME card, first restore (in memory) the face this expense
+        // already holds, so it competes for its own freed-up balance.
+        const tranches = await getTranches(effectiveCardId as number);
+        if (existing.card_id === effectiveCardId) {
+          for (const a of origAllocs) {
+            const t = tranches.find((x) => x.id === a.loadId);
+            if (t) t.face_remaining += a.faceConsumed;
+          }
+        }
+        const plan = planAllocationFromTranches(tranches, newFace);
+        if (!plan.ok) {
+          const shortfall = round2(newFace - plan.balance);
+          return res.status(400).json({ message: `Amount exceeds card balance by ${shortfall}` });
+        }
+
+        ledgerStatements.push(...reverseStatements(numericId, origAllocs));
+        ledgerStatements.push(...applyAllocationStatements(numericId, plan.allocations));
+        updates.push('amount = ?'); args.push(plan.realCost);
+        updates.push('face_amount = ?'); args.push(newFace);
+        updates.push('card_id = ?'); args.push(effectiveCardId);
+      } else {
+        // Card → direct: give back the balance and clear the card fields. The
+        // price tag becomes the plain amount unless a new amount was supplied.
+        ledgerStatements.push(...reverseStatements(numericId, origAllocs));
+        const newAmount = amountInBody ? amount : (existing.face_amount ?? existing.amount);
+        updates.push('amount = ?'); args.push(newAmount);
+        updates.push('face_amount = ?'); args.push(null);
+        updates.push('card_id = ?'); args.push(null);
+      }
+    } else if (amountInBody) {
+      // Plain amount edit on a direct expense (no card involved).
+      updates.push('amount = ?');
+      args.push(amount);
+    }
+
     if (updates.length === 0) {
       return res.status(400).json({ message: 'No fields to update' });
     }
 
     args.push(id);
-
-    const result = await trackedExecute({
-      sql: `UPDATE expenses SET ${updates.join(', ')} WHERE id = ?`,
-      args
-    }, 'updateExpense');
-
-    if (result.rowsAffected === 0) {
-      return res.status(404).json({ message: 'Expense not found' });
-    }
+    await db.batch(
+      [{ sql: `UPDATE expenses SET ${updates.join(', ')} WHERE id = ?`, args }, ...ledgerStatements],
+      'write',
+    );
 
     if (pendingTagBump !== null) {
       // Best-effort; never fail the request on this.
@@ -313,16 +432,8 @@ router.put('/:id', async (req, res) => {
       ).catch(() => {});
     }
 
-    const updatedResult = await trackedExecute({
-      sql: `SELECT expenses.id, expenses.amount, expenses.category_id, expenses.note,
-                   expenses.created_at, expenses.tag_id, c.name AS category
-            FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
-            WHERE expenses.id = ?`,
-      args: [id]
-    }, 'getUpdatedExpense');
-
-    const expense = updatedResult.rows[0] as unknown as ExpenseRow;
-    res.json(expenseRowToExpense(expense));
+    const expense = await loadExpenseById(id);
+    res.json(expenseRowToExpense(expense as ExpenseRow));
   } catch (err) {
     res.status(500).json({ message: (err as Error).message });
   }
@@ -348,12 +459,14 @@ router.put('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await trackedExecute({
-      sql: 'DELETE FROM expenses WHERE id = ?',
-      args: [req.params.id]
-    }, 'deleteExpense');
+    // If this was a card purchase, give the balance back to the tranches it drew
+    // from before removing the row (the FK cascade only deletes allocation rows).
+    const reversal = await buildReversalStatements(Number(req.params.id));
+    const statements = [...reversal, { sql: 'DELETE FROM expenses WHERE id = ?', args: [req.params.id] }];
+    const results = await db.batch(statements, 'write');
 
-    if (result.rowsAffected === 0) {
+    const deleteResult = results[results.length - 1];
+    if (deleteResult.rowsAffected === 0) {
       return res.status(404).json({ message: 'Expense not found' });
     }
 
