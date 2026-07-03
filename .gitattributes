@@ -1,0 +1,4 @@
+# Shell scripts run on the Linux VM (deploy/*.sh is scp'd and executed there);
+# CRLF endings break bash with "$'\r': command not found". Force LF so
+# core.autocrlf=true on Windows checkouts can't corrupt them.
+*.sh text eol=lf
