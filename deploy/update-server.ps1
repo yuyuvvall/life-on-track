@@ -63,8 +63,14 @@ try {
         Section "Refreshing env from Secret Manager"
         $tmpEnv = New-TemporaryFile
         try {
-            gcloud secrets versions access latest --secret=$SECRET_NAME > $tmpEnv.FullName
+            # --out-file writes the raw secret bytes; a PowerShell `>` redirect would
+            # re-encode as UTF-16 and corrupt the env file on the Linux VM.
+            # The path must be wrapped in "$()" — in a token like --out-file=$x.FullName,
+            # PowerShell expands $x but keeps ".FullName" as literal text, silently
+            # writing to the wrong file (this shipped an empty env once).
+            gcloud secrets versions access latest --secret=$SECRET_NAME --project=$PROJECT --out-file="$($tmpEnv.FullName)"
             Check-Exit "secret fetch"
+            if ((Get-Item $tmpEnv.FullName).Length -eq 0) { throw "Fetched secret is empty — refusing to ship it" }
             gcloud compute scp $tmpEnv.FullName "${Name}:/tmp/env.tmp" `
                 --project=$PROJECT --zone=$Zone --tunnel-through-iap --quiet
             Check-Exit "scp (env)"

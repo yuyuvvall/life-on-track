@@ -16,6 +16,7 @@ import budgetsRouter from './routes/budgets.js';
 import goalsRouter from './routes/goals.js';
 import weeklyRouter from './routes/weekly.js';
 import logsRouter from './routes/logs.js';
+import voiceRouter from './routes/voice.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,7 +25,7 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Purpose'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Purpose', 'X-Api-Key'],
 }));
 app.use(express.json());
 app.use(queryLoggerMiddleware());
@@ -41,6 +42,7 @@ app.use('/api/cards', cardsRouter);
 app.use('/api/goals', goalsRouter);
 app.use('/api/weekly-summary', weeklyRouter);
 app.use('/api/logs', logsRouter);
+app.use('/api/voice', voiceRouter);
 
 // Swagger Documentation
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
