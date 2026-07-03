@@ -204,6 +204,19 @@ CREATE TABLE IF NOT EXISTS weekly_reflections (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 7. Voice Commands (audit log for voice entry; every transcript + parse outcome,
+-- so misheard or misparsed commands can be diagnosed after the fact)
+CREATE TABLE IF NOT EXISTS voice_commands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    parsed TEXT,
+    status TEXT NOT NULL CHECK (status IN ('created', 'unclear', 'error')),
+    entity_kind TEXT,
+    entity_id TEXT,
+    error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks(deadline);
 CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category);
