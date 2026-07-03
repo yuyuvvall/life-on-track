@@ -15,12 +15,17 @@ export type VoiceIntent =
 
 const SYSTEM_PROMPT = `You parse short voice-transcribed commands for a personal life-tracking app and translate each one into exactly one tool call.
 
-Commands arrive in English or Hebrew and may contain speech-to-text errors; infer the intended meaning.
+Commands arrive in English or Hebrew through a phone speech-to-text engine, so expect phonetic transcription errors and aggressively correct them to what was plausibly said. Currency words garble constantly (shekels → "seconds", "shackles", "circles", "sickles", "nickels"; שקל → "סקל", "שכל") — the currency word carries no information anyway, since amounts are recorded as bare numbers. A number next to something buyable is an amount of money no matter what unit word follows it. The same goes for verbs: "at a task" means "add a task", "expand" may be "expense", and so on.
 
 Rules:
-- An expense mentions spending money: an amount (shekels/שקל/ils unless stated otherwise — record the bare number) and what it was for. Map what it was for onto the closest known expense category from the list provided; only pass a new category name when nothing fits. Category names must be in English. Anything descriptive beyond amount + category goes into note.
-- A task is something to do later. The title should be a clean imperative phrase without filler like "add a task to". Map "work"/עבודה context to Work, bureaucracy (bank, bills, government, appointments) to Admin, everything else to Personal. Deadlines: resolve relative dates ("tomorrow", "מחר", "Friday") against today's date given in the message, as an ISO 8601 datetime; use null when no deadline is mentioned.
-- If the command is not clearly a task or an expense, or a required detail (like an expense amount) is missing, call unclear instead of guessing.`;
+- An expense mentions spending money: an amount and what it was for. Record the bare number as the amount. Map what it was for onto the closest known expense category from the list provided; only pass a new category name when nothing fits. Category names must be in English. Anything descriptive beyond amount + category goes into note.
+- A task is something to do later. The title should be a clean imperative phrase without filler like "add a task to". If the user explicitly names the task category ("work task", "admin task", "משימת עבודה"), use exactly that; otherwise map "work"/עבודה context to Work, bureaucracy (bank, bills, government, appointments) to Admin, everything else to Personal. Deadlines: resolve relative dates ("tomorrow", "מחר", "Friday") against today's date given in the message, as an ISO 8601 datetime; use null when no deadline is mentioned.
+- Always prefer a best-effort interpretation over rejecting the command. Call unclear only as a last resort: when even with generous correction you cannot tell whether it is a task or an expense, or an expense has no number anywhere in it.
+
+Examples:
+- "add a food expense for 65 seconds" → create_expense {amount: 65, category: "Food"} ("seconds" is misheard "shekels")
+- "at a work task to migrate the API by Friday" → create_task {title: "Migrate the API", category: "Work", deadline: <upcoming Friday>}
+- "add an expense" → unclear (no amount and no hint of what was bought)`;
 
 const TOOLS: Anthropic.Messages.ToolUnion[] = [
   {
@@ -61,7 +66,8 @@ const TOOLS: Anthropic.Messages.ToolUnion[] = [
   },
   {
     name: 'unclear',
-    description: 'Call when the command is not clearly a task or expense, or is missing a required detail.',
+    description:
+      'Last resort: call only when even generous speech-to-text correction cannot make the command a task or an expense.',
     strict: true,
     input_schema: {
       type: 'object',
