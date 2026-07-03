@@ -663,4 +663,17 @@
   }
 
   &__expense-amount-arrow { color: @gray-500; font-size: 0.85em; }
+
+  // "↩ ₪60 repaid · net ₪40" line under the amount when part of the expense
+  // was paid back (the amount above stays true to the bank charge).
+  // Doubled selector so it beats the `&__expense-amount p` color rule.
+  &__expense-amount &__expense-repaid {
+    color: @green-500;
+    font-size: 0.75em;
+    font-weight: 500;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  &__expense-repaid-net { color: @gray-500; }
 }

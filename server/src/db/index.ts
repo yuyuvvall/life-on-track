@@ -185,6 +185,17 @@ CREATE TABLE IF NOT EXISTS card_payment_allocations (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 5h. Expense Repayments (money paid back against an expense, e.g. a friend's
+-- share; the expense's amount stays true to the bank charge and totals net it out)
+CREATE TABLE IF NOT EXISTS expense_repayments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    expense_id INTEGER NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+    amount REAL NOT NULL CHECK (amount > 0),
+    note TEXT,
+    repaid_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 6. Weekly Reflections
 CREATE TABLE IF NOT EXISTS weekly_reflections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -208,6 +219,7 @@ CREATE INDEX IF NOT EXISTS idx_prepaid_cards_archived ON prepaid_cards(is_archiv
 CREATE INDEX IF NOT EXISTS idx_card_loads_card ON card_loads(card_id, loaded_at);
 CREATE INDEX IF NOT EXISTS idx_card_alloc_expense ON card_payment_allocations(expense_id);
 CREATE INDEX IF NOT EXISTS idx_card_alloc_load ON card_payment_allocations(load_id);
+CREATE INDEX IF NOT EXISTS idx_expense_repayments_expense ON expense_repayments(expense_id);
 `;
 
 // Initialize schema on startup

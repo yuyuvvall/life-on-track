@@ -21,6 +21,7 @@ import { useTags } from '@/hooks/useTags'
 import { useCategories } from '@/hooks/useCategories'
 import { useCards } from '@/hooks/useCards'
 import { formatCurrency } from '@/utils/currency'
+import { netAmount } from '@/utils/expenseMath'
 import type { Category, Expense, PrepaidCard, Tag } from '@/types'
 import './expenses-view.less'
 
@@ -279,7 +280,7 @@ const ExpensesView = () => {
       if (!categories[expense.category]) {
         categories[expense.category] = { total: 0, count: 0 }
       }
-      categories[expense.category].total += expense.amount
+      categories[expense.category].total += netAmount(expense)
       categories[expense.category].count += 1
     })
 
@@ -303,12 +304,12 @@ const ExpensesView = () => {
     let untaggedCount = 0
     for (const e of expenses) {
       if (e.tagId === null) {
-        untaggedTotal += e.amount
+        untaggedTotal += netAmount(e)
         untaggedCount += 1
         continue
       }
       const prev = accum.get(e.tagId) ?? { total: 0, count: 0 }
-      accum.set(e.tagId, { total: prev.total + e.amount, count: prev.count + 1 })
+      accum.set(e.tagId, { total: prev.total + netAmount(e), count: prev.count + 1 })
     }
     const rows: Array<{ tag: Tag | null; total: number; count: number }> = []
     for (const [tagId, stats] of accum) {
@@ -331,7 +332,7 @@ const ExpensesView = () => {
       if (!accum[e.category]) accum[e.category] = new Map()
       const bucket = accum[e.category]
       const prev = bucket.get(e.tagId) ?? { total: 0, count: 0 }
-      bucket.set(e.tagId, { total: prev.total + e.amount, count: prev.count + 1 })
+      bucket.set(e.tagId, { total: prev.total + netAmount(e), count: prev.count + 1 })
     }
     for (const [category, bucket] of Object.entries(accum)) {
       const rows: { tag: Tag; total: number; count: number }[] = []
@@ -347,7 +348,7 @@ const ExpensesView = () => {
   }, [expenses, tagsById])
 
   const totalSpent = useMemo(() => {
-    return expenses.reduce((sum, e) => sum + e.amount, 0)
+    return expenses.reduce((sum, e) => sum + netAmount(e), 0)
   }, [expenses])
 
   const handleDelete = (e: React.MouseEvent, expense: Expense) => {
@@ -359,6 +360,8 @@ const ExpensesView = () => {
       durationMs: 5000,
       action: {
         label: 'Undo',
+        // Undo recreates a plain expense — cardId/tagId (pre-existing) and any
+        // repayments are not restored.
         onClick: () => {
           createExpense.mutate({
             amount: expense.amount,
@@ -589,6 +592,12 @@ const ExpensesView = () => {
                         </p>
                       ) : (
                         <p>{formatCurrency(expense.amount, { space: true })}</p>
+                      )}
+                      {expense.repaidTotal > 0 && (
+                        <p className="expenses-view__expense-repaid">
+                          <span aria-hidden>↩</span> {formatCurrency(expense.repaidTotal)} repaid
+                          <span className="expenses-view__expense-repaid-net"> · net {formatCurrency(netAmount(expense))}</span>
+                        </p>
                       )}
                     </div>
                     <button

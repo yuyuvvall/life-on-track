@@ -4,6 +4,7 @@ import type {
   Expense,
   CreateExpenseRequest,
   UpdateExpenseRequest,
+  CreateRepaymentRequest,
   CreateRecurringExpenseRequest,
   UpdateRecurringExpenseRequest,
 } from '@/types';
@@ -78,6 +79,42 @@ export function useDeleteExpense() {
     },
     invalidateOnSettled: [['weeklySummary'], ['cards']],
     errorMessage: 'Could not delete expense',
+  });
+}
+
+// Repayments Hooks
+
+export function useExpenseRepayments(expenseId: number | undefined, purpose = 'Load repayments') {
+  return useQuery({
+    queryKey: ['expenses', expenseId, 'repayments'],
+    queryFn: () => expensesApi.getRepayments(expenseId!, purpose),
+    enabled: expenseId !== undefined,
+  });
+}
+
+export function useAddRepayment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: CreateRepaymentRequest }) =>
+      expensesApi.addRepayment(id, data, 'Record repayment'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['weeklySummary'] });
+    },
+  });
+}
+
+export function useDeleteRepayment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, repaymentId }: { id: number; repaymentId: number }) =>
+      expensesApi.deleteRepayment(id, repaymentId, 'Delete repayment'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['weeklySummary'] });
+    },
   });
 }
 

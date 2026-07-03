@@ -31,6 +31,9 @@ import type {
   CreateWorkLogRequest,
   CreateExpenseRequest,
   UpdateExpenseRequest,
+  ExpenseRepayment,
+  CreateRepaymentRequest,
+  CreateRepaymentResponse,
   CreateRecurringExpenseRequest,
   UpdateRecurringExpenseRequest,
   CreateGoalRequest,
@@ -209,6 +212,19 @@ export const expensesApi = {
   
   delete: (id: number, purpose?: string) =>
     request<void>(`/expenses/${id}`, { method: 'DELETE', purpose }),
+
+  getRepayments: (id: number, purpose?: string) =>
+    request<ExpenseRepayment[]>(`/expenses/${id}/repayments`, { purpose }),
+
+  addRepayment: (id: number, data: CreateRepaymentRequest, purpose?: string) =>
+    request<CreateRepaymentResponse>(`/expenses/${id}/repayments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      purpose,
+    }),
+
+  deleteRepayment: (id: number, repaymentId: number, purpose?: string) =>
+    request<void>(`/expenses/${id}/repayments/${repaymentId}`, { method: 'DELETE', purpose }),
 };
 
 // Recurring Expenses API

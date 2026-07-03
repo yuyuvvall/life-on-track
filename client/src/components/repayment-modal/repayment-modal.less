@@ -1,6 +1,6 @@
 @import '../../styles/variables.less';
 
-.card-load-modal {
+.repayment-modal {
   &__backdrop {
     position: fixed;
     inset: 0;
@@ -51,6 +51,86 @@
     display: flex;
     flex-direction: column;
     gap: @space-3;
+  }
+
+  &__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: @space-2;
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+    background: @surface-700;
+    border: 0.0625em solid @surface-600;
+    border-radius: @radius-lg;
+    padding: @space-2 @space-3;
+  }
+
+  &__item-amount {
+    font-weight: 600;
+    color: @green-500;
+  }
+
+  &__item-detail {
+    flex: 1;
+    color: @gray-400;
+    font-size: 0.875em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__item-note { color: @gray-300; }
+
+  &__item-delete {
+    background: transparent;
+    color: @gray-500;
+    border: none;
+    font-size: 1.1em;
+    cursor: pointer;
+    padding: 0 @space-1;
+
+    &:hover { color: @accent-red; }
+    &:disabled { opacity: 0.5; cursor: default; }
+  }
+
+  &__empty {
+    color: @gray-500;
+    font-size: 0.875em;
+    margin: 0;
+  }
+
+  &__readout {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    background: @surface-700;
+    border-radius: @radius-lg;
+    padding: @space-3;
+    border: 0.0625em solid @surface-600;
+  }
+
+  &__readout-label {
+    color: @gray-400;
+    font-size: 0.875em;
+  }
+
+  &__readout-value {
+    color: @accent-green;
+    font-size: 1.5em;
+    font-weight: 500;
+  }
+
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: @space-3;
 
     label {
       display: flex;
@@ -69,26 +149,6 @@
     }
   }
 
-  // Cash ⇄ Balance pair: type either one, the other is derived via the rate
-  &__amounts {
-    display: flex;
-    align-items: flex-end;
-    gap: @space-2;
-
-    label {
-      flex: 1;
-      min-width: 0;
-
-      input { width: 100%; }
-    }
-  }
-
-  &__amounts-arrow {
-    color: @gray-500;
-    padding-bottom: @space-2;
-    flex-shrink: 0;
-  }
-
   &__error {
     color: @accent-red;
     font-size: 0.875em;
@@ -99,7 +159,6 @@
     display: flex;
     justify-content: flex-end;
     gap: @space-2;
-    padding: 0 @space-4 @space-4;
 
     button {
       padding: @space-2 @space-4;

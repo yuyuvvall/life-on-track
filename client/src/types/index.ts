@@ -37,6 +37,16 @@ export interface Expense {
   tagId: number | null;
   cardId: number | null;     // prepaid card this was paid from, or null for direct/cash
   faceAmount: number | null; // price tag for card purchases; null for direct expenses
+  repaidTotal: number;       // Σ repayments against this expense; net cost = amount − repaidTotal
+}
+
+export interface ExpenseRepayment {
+  id: number;
+  expenseId: number;
+  amount: number;
+  note: string | null;
+  repaidAt: string;
+  createdAt: string;
 }
 
 export type RecurrenceType = 'weekly' | 'monthly';
@@ -324,6 +334,17 @@ export interface UpdateExpenseRequest {
   createdAt?: string;
   tagId?: number | null;
   cardId?: number | null;
+}
+
+export interface CreateRepaymentRequest {
+  amount: number;
+  note?: string;
+  repaidAt?: string;
+}
+
+export interface CreateRepaymentResponse {
+  repayment: ExpenseRepayment;
+  expense: Expense;
 }
 
 export interface CreateRecurringExpenseRequest {

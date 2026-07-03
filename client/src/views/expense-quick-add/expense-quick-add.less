@@ -364,9 +364,15 @@
 
   // Save as tag button ----------------------------------------------------
 
-  &__save-as-tag {
+  &__pill-row {
     align-self: center;
+    display: flex;
+    gap: @space-2;
     margin-top: @space-2;
+  }
+
+  &__save-as-tag,
+  &__repayments-pill {
     background: @surface-700;
     color: #fff;
     border: none;
@@ -377,6 +383,10 @@
 
     &:hover:not(:disabled) { background: @surface-600; }
     &:disabled { opacity: 0.4; cursor: default; }
+  }
+
+  &__repayments-pill--on {
+    color: @green-500;
   }
 }
 

@@ -34,4 +34,6 @@ export { default as CardLoadModal } from './card-load-modal'
 export type { CardLoadModalProps } from './card-load-modal'
 export { default as CardDetailModal } from './card-detail-modal'
 export type { CardDetailModalProps } from './card-detail-modal'
+export { default as RepaymentModal } from './repayment-modal'
+export type { RepaymentModalProps } from './repayment-modal'
 

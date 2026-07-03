@@ -30,3 +30,17 @@ export function balanceFromCash(cashPaid: number, rate: number): number {
   if (factor <= 0) return 0;
   return cashPaid / factor;
 }
+
+/**
+ * The inverse of balanceFromCash: given the balance (face value) you want on
+ * the card and the discount rate, the cash it costs. cash = face × (1 − rate).
+ */
+export function cashFromBalance(faceValue: number, rate: number): number {
+  const clampedRate = Math.min(Math.max(rate, 0), 0.9999);
+  return faceValue * (1 - clampedRate);
+}
+
+/** Round to 2 decimals for display — mirrors the server's round2. */
+export function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
