@@ -3,6 +3,7 @@ import { getWeekStart, getWeekEnd, trackedExecute } from '../db/index.js';
 import type { WorkLogRow, ExpenseRow, GoalRow, WeeklySummary } from '../types.js';
 import { workLogRowToWorkLog, expenseRowToExpense, goalRowToGoal } from '../types.js';
 import { recalculateFrequencyGoalsCurrentValue } from './goals.js';
+import { EXPENSE_COLUMNS } from './expenses.js';
 
 const router = Router();
 
@@ -41,10 +42,10 @@ router.get('/', async (req, res) => {
     }, 'getWeeklyWorkLogs');
     const workLogs = workLogsResult.rows as unknown as WorkLogRow[];
 
-    // Get expenses for the week (joining categories so the response carries the live name)
+    // Get expenses for the week (shared projection: category name, card columns
+    // and repaid_total all come along)
     const expensesResult = await trackedExecute({
-      sql: `SELECT expenses.id, expenses.amount, expenses.category_id, expenses.note,
-                   expenses.created_at, expenses.tag_id, c.name AS category
+      sql: `SELECT ${EXPENSE_COLUMNS}
             FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
             WHERE DATE(expenses.created_at) BETWEEN ? AND ?
             ORDER BY expenses.created_at DESC`,
@@ -52,13 +53,14 @@ router.get('/', async (req, res) => {
     }, 'getWeeklyExpenses');
     const expenses = expensesResult.rows as unknown as ExpenseRow[];
 
-    // Calculate expenses by category
+    // Calculate expenses by category — net of repayments, at the expense's own date
     const expensesByCategory: Record<string, number> = {};
     let totalExpenses = 0;
-    
+
     expenses.forEach((exp) => {
-      expensesByCategory[exp.category] = (expensesByCategory[exp.category] || 0) + exp.amount;
-      totalExpenses += exp.amount;
+      const net = exp.amount - Number(exp.repaid_total ?? 0);
+      expensesByCategory[exp.category] = (expensesByCategory[exp.category] || 0) + net;
+      totalExpenses += net;
     });
 
     // Calculate integrity rate

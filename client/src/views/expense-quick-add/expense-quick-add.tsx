@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCreateExpense, useUpdateExpense, useExpense, useCreateRecurringExpense } from '@/hooks'
 import { useCategories } from '@/hooks/useCategories'
 import { useCards } from '@/hooks/useCards'
+import { showToast } from '@/store/toastStore'
 import { CURRENCY_SYMBOL, formatCurrency } from '@/utils/currency'
 import { estimateCardCost } from '@/utils/cardMath'
 import { WEEK_DAY_NAMES } from '@/utils/dateConstants'
@@ -13,6 +14,7 @@ import DatePickerModal from './date-picker-modal'
 import TagChipRow from '@/components/tag-chip-row'
 import TagManageModal from '@/components/tag-manage-modal'
 import CardLoadModal from '@/components/card-load-modal'
+import RepaymentModal from '@/components/repayment-modal'
 import './expense-quick-add.less'
 
 const parseInitialDate = (dateParam: string | null): Date => {
@@ -54,6 +56,7 @@ const ExpenseQuickAdd = () => {
   const [tagId, setTagId] = useState<number | null>(null)
   const [cardId, setCardId] = useState<number | null>(null)
   const [showLoadModal, setShowLoadModal] = useState(false)
+  const [showRepaymentModal, setShowRepaymentModal] = useState(false)
   const [selectedDate, setSelectedDate] = useState(() => parseInitialDate(searchParams.get('date')))
   const [showDatePicker, setShowDatePicker] = useState(false)
 
@@ -154,7 +157,14 @@ const ExpenseQuickAdd = () => {
             cardId: cardId,
           },
         },
-        { onSuccess: () => navigate(-1) }
+        {
+          onSuccess: () => navigate(-1),
+          // Surface server-side rejections (e.g. lowering the amount below
+          // what's already been repaid) instead of failing silently.
+          onError: (err: Error) => {
+            showToast({ message: err.message || 'Could not update expense', variant: 'error' })
+          },
+        }
       )
     } else {
       createExpense.mutate(
@@ -348,14 +358,30 @@ const ExpenseQuickAdd = () => {
         />
       </div>
 
-      <button
-        type="button"
-        className="expense-quick-add__save-as-tag"
-        onClick={() => setSaveAsTagOpen(true)}
-        disabled={parseFloat(amount) <= 0}
-      >
-        💾 Save as tag
-      </button>
+      <div className="expense-quick-add__pill-row">
+        <button
+          type="button"
+          className="expense-quick-add__save-as-tag"
+          onClick={() => setSaveAsTagOpen(true)}
+          disabled={parseFloat(amount) <= 0}
+        >
+          💾 Save as tag
+        </button>
+        {isEditMode && existingExpense && (
+          <button
+            type="button"
+            className={`expense-quick-add__repayments-pill${
+              existingExpense.repaidTotal > 0 ? ' expense-quick-add__repayments-pill--on' : ''
+            }`}
+            onClick={() => setShowRepaymentModal(true)}
+          >
+            <span aria-hidden>↩</span>{' '}
+            {existingExpense.repaidTotal > 0
+              ? `Repaid ${formatCurrency(existingExpense.repaidTotal)}`
+              : 'Add repayment'}
+          </button>
+        )}
+      </div>
 
       <div className="expense-quick-add__keypad">
         <div className="expense-quick-add__keypad-grid">
@@ -455,6 +481,10 @@ const ExpenseQuickAdd = () => {
 
       {showLoadModal && selectedCard && (
         <CardLoadModal card={selectedCard} onClose={() => setShowLoadModal(false)} />
+      )}
+
+      {showRepaymentModal && existingExpense && (
+        <RepaymentModal expense={existingExpense} onClose={() => setShowRepaymentModal(false)} />
       )}
     </div>
   )

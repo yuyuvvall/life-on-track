@@ -37,6 +37,16 @@ export interface ExpenseRow {
   tag_id: number | null;
   card_id: number | null;
   face_amount: number | null;
+  repaid_total: number;
+}
+
+export interface ExpenseRepaymentRow {
+  id: number;
+  expense_id: number;
+  amount: number;
+  note: string | null;
+  repaid_at: string;
+  created_at: string;
 }
 
 export interface RecurringExpenseRow {
@@ -173,6 +183,16 @@ export interface Expense {
   tagId: number | null;
   cardId: number | null;   // prepaid card this was paid from, or null for direct/cash
   faceAmount: number | null; // price tag for card purchases; null for direct expenses
+  repaidTotal: number;     // Σ expense_repayments.amount; net cost = amount − repaidTotal
+}
+
+export interface ExpenseRepayment {
+  id: number;
+  expenseId: number;
+  amount: number;
+  note: string | null;
+  repaidAt: string;
+  createdAt: string;
 }
 
 export interface RecurringExpense {
@@ -345,6 +365,18 @@ export function expenseRowToExpense(row: ExpenseRow): Expense {
     tagId: row.tag_id,
     cardId: row.card_id ?? null,
     faceAmount: row.face_amount ?? null,
+    repaidTotal: Number(row.repaid_total ?? 0),
+  };
+}
+
+export function repaymentRowToRepayment(row: ExpenseRepaymentRow): ExpenseRepayment {
+  return {
+    id: row.id,
+    expenseId: row.expense_id,
+    amount: row.amount,
+    note: row.note,
+    repaidAt: row.repaid_at,
+    createdAt: row.created_at,
   };
 }
 

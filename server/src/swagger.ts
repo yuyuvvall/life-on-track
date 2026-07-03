@@ -156,6 +156,20 @@ const options: swaggerJsdoc.Options = {
             note: { type: 'string', nullable: true },
             createdAt: { type: 'string', format: 'date-time' },
             tagId: { type: 'integer', nullable: true },
+            cardId: { type: 'integer', nullable: true },
+            faceAmount: { type: 'number', nullable: true },
+            repaidTotal: { type: 'number' },
+          },
+        },
+        ExpenseRepayment: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            expenseId: { type: 'integer' },
+            amount: { type: 'number' },
+            note: { type: 'string', nullable: true },
+            repaidAt: { type: 'string', format: 'date-time' },
+            createdAt: { type: 'string', format: 'date-time' },
           },
         },
         CreateExpenseRequest: {

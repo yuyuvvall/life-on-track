@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import type { InValue } from '@libsql/client';
 import db, { trackedExecute, resolveCategoryId } from '../db/index.js';
-import type { ExpenseRow, PrepaidCardRow } from '../types.js';
-import { expenseRowToExpense } from '../types.js';
+import type { ExpenseRow, ExpenseRepaymentRow, PrepaidCardRow } from '../types.js';
+import { expenseRowToExpense, repaymentRowToRepayment } from '../types.js';
 import {
   planAllocation,
   planAllocationFromTranches,
@@ -19,9 +19,12 @@ const router = Router();
 // Shared projection so every read returns the full expense shape, including the
 // prepaid-card columns. `amount` is always the real money spent; `face_amount`
 // holds the price tag for card purchases (NULL for direct/cash expenses).
-const EXPENSE_COLUMNS =
+// `repaid_total` is a correlated subquery (not a JOIN) so the projection stays
+// safe to splice into any query without GROUP BY or row multiplication.
+export const EXPENSE_COLUMNS =
   'expenses.id, expenses.amount, expenses.category_id, expenses.note, ' +
-  'expenses.created_at, expenses.tag_id, expenses.card_id, expenses.face_amount, c.name AS category';
+  'expenses.created_at, expenses.tag_id, expenses.card_id, expenses.face_amount, c.name AS category, ' +
+  'COALESCE((SELECT SUM(r.amount) FROM expense_repayments r WHERE r.expense_id = expenses.id), 0) AS repaid_total';
 
 async function loadExpenseById(id: number | string): Promise<ExpenseRow | undefined> {
   const result = await trackedExecute({
@@ -144,6 +147,165 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Expense not found' });
     }
     res.json(expenseRowToExpense(expense));
+  } catch (err) {
+    res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// ── Repayments ───────────────────────────────────────────────────────────────
+// Money paid back against an expense (e.g. a friend's share of a shared bill).
+// The expense's `amount` stays true to the bank charge; aggregations subtract
+// `repaid_total` at the expense's own date. Repayments never touch the card
+// ledger — that must keep reconciling to the cash actually loaded.
+
+const EPS = 1e-9;
+
+/**
+ * @swagger
+ * /expenses/{id}/repayments:
+ *   get:
+ *     summary: List repayments recorded against an expense
+ *     tags: [Expenses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Repayments, newest first
+ *       404:
+ *         description: Expense not found
+ */
+router.get('/:id/repayments', async (req, res) => {
+  try {
+    const expense = await loadExpenseById(req.params.id);
+    if (!expense) {
+      return res.status(404).json({ message: 'Expense not found' });
+    }
+    const result = await trackedExecute({
+      sql: 'SELECT * FROM expense_repayments WHERE expense_id = ? ORDER BY repaid_at DESC, id DESC',
+      args: [req.params.id],
+    }, 'getExpenseRepayments');
+    const rows = result.rows as unknown as ExpenseRepaymentRow[];
+    res.json(rows.map(repaymentRowToRepayment));
+  } catch (err) {
+    res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+/**
+ * @swagger
+ * /expenses/{id}/repayments:
+ *   post:
+ *     summary: Record a repayment against an expense
+ *     tags: [Expenses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [amount]
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               note:
+ *                 type: string
+ *               repaidAt:
+ *                 type: string
+ *                 format: date-time
+ *     responses:
+ *       201:
+ *         description: Repayment created; returns it with the refreshed expense
+ *       400:
+ *         description: Invalid amount or repayment exceeds the remaining amount
+ *       404:
+ *         description: Expense not found
+ */
+router.post('/:id/repayments', async (req, res) => {
+  try {
+    const { amount, note, repaidAt } = req.body;
+
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ message: 'Repayment amount must be a positive number' });
+    }
+
+    const expense = await loadExpenseById(req.params.id);
+    if (!expense) {
+      return res.status(404).json({ message: 'Expense not found' });
+    }
+
+    // Repayments count against the real money spent (`amount`), never the
+    // card price tag (`face_amount`).
+    const repayAmount = round2(amount);
+    const remaining = round2(expense.amount - Number(expense.repaid_total ?? 0));
+    if (round2(Number(expense.repaid_total ?? 0) + repayAmount) > expense.amount + EPS) {
+      return res.status(400).json({ message: `Repayment exceeds remaining ${remaining} on this expense` });
+    }
+
+    const result = await trackedExecute({
+      sql: 'INSERT INTO expense_repayments (expense_id, amount, note, repaid_at) VALUES (?, ?, ?, ?)',
+      args: [req.params.id, repayAmount, note?.trim?.() || null, repaidAt || new Date().toISOString()],
+    }, 'createExpenseRepayment');
+
+    const repaymentId = Number(result.lastInsertRowid);
+    const rowResult = await trackedExecute({
+      sql: 'SELECT * FROM expense_repayments WHERE id = ?',
+      args: [repaymentId],
+    }, 'getExpenseRepayment');
+    const row = rowResult.rows[0] as unknown as ExpenseRepaymentRow;
+    const refreshed = await loadExpenseById(req.params.id);
+
+    res.status(201).json({
+      repayment: repaymentRowToRepayment(row),
+      expense: expenseRowToExpense(refreshed as ExpenseRow),
+    });
+  } catch (err) {
+    res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+/**
+ * @swagger
+ * /expenses/{id}/repayments/{repaymentId}:
+ *   delete:
+ *     summary: Delete a repayment
+ *     tags: [Expenses]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: path
+ *         name: repaymentId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       204:
+ *         description: Repayment deleted
+ *       404:
+ *         description: Repayment not found
+ */
+router.delete('/:id/repayments/:repaymentId', async (req, res) => {
+  try {
+    const result = await trackedExecute({
+      sql: 'DELETE FROM expense_repayments WHERE id = ? AND expense_id = ?',
+      args: [req.params.repaymentId, req.params.id],
+    }, 'deleteExpenseRepayment');
+    if (result.rowsAffected === 0) {
+      return res.status(404).json({ message: 'Repayment not found' });
+    }
+    res.status(204).send();
   } catch (err) {
     res.status(500).json({ message: (err as Error).message });
   }
@@ -363,6 +525,11 @@ router.put('/:id', async (req, res) => {
     const cardChanged = cardInBody && (cardId ?? null) !== (existing.card_id ?? null);
     const needsRealloc = (willBeCard && (amountInBody || cardChanged)) || (wasCard && !willBeCard);
 
+    // The amount that will end up stored after this edit (real money), for the
+    // repaid-total guard below. Only known per-branch: a card re-allocation
+    // stores plan.realCost, not the face value the client sent.
+    let finalStoredAmount: number | undefined;
+
     if (needsRealloc) {
       const origAllocs = await getAllocations(numericId);
 
@@ -399,6 +566,7 @@ router.put('/:id', async (req, res) => {
         updates.push('amount = ?'); args.push(plan.realCost);
         updates.push('face_amount = ?'); args.push(newFace);
         updates.push('card_id = ?'); args.push(effectiveCardId);
+        finalStoredAmount = plan.realCost;
       } else {
         // Card → direct: give back the balance and clear the card fields. The
         // price tag becomes the plain amount unless a new amount was supplied.
@@ -407,11 +575,22 @@ router.put('/:id', async (req, res) => {
         updates.push('amount = ?'); args.push(newAmount);
         updates.push('face_amount = ?'); args.push(null);
         updates.push('card_id = ?'); args.push(null);
+        finalStoredAmount = newAmount;
       }
     } else if (amountInBody) {
       // Plain amount edit on a direct expense (no card involved).
       updates.push('amount = ?');
       args.push(amount);
+      finalStoredAmount = amount;
+    }
+
+    // An edit may not drop the stored amount below what's already been repaid —
+    // the user must delete repayments first, keeping money history explicit.
+    const repaidTotal = Number(existing.repaid_total ?? 0);
+    if (finalStoredAmount !== undefined && repaidTotal > 0 && finalStoredAmount < repaidTotal - 1e-9) {
+      return res.status(400).json({
+        message: `New amount is below the ${round2(repaidTotal)} already repaid. Delete repayments first.`,
+      });
     }
 
     if (updates.length === 0) {
