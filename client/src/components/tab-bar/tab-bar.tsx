@@ -1,5 +1,6 @@
 import './tab-bar.less'
 import { Link, useLocation } from 'react-router-dom'
+import { UserButton } from '@clerk/react'
 
 const TABS = [
   { path: '/', label: 'Pulse', icon: '⚡' },
@@ -31,6 +32,10 @@ const TabBar = () => {
             <span className="tab-bar__label">{tab.label}</span>
           </Link>
         ))}
+        <div className="tab-bar__tab tab-bar__account">
+          <UserButton />
+          <span className="tab-bar__label">Account</span>
+        </div>
       </div>
     </nav>
   )
