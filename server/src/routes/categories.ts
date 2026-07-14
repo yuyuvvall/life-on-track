@@ -1,15 +1,16 @@
 import { Router, Request, Response } from 'express';
 import type { InValue } from '@libsql/client';
-import { trackedExecute } from '../db/index.js';
+import { trackedExecute, ensureUserCategories } from '../db/index.js';
+import { getUserId } from '../middleware/auth.js';
 import { CategoryRow, categoryRowToCategory } from '../types.js';
 
 const router = Router();
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
-async function loadCategoryRow(id: number): Promise<CategoryRow | null> {
+async function loadCategoryRow(id: number, userId: string): Promise<CategoryRow | null> {
   const result = await trackedExecute(
-    { sql: 'SELECT * FROM categories WHERE id = ?', args: [id] },
+    { sql: 'SELECT * FROM categories WHERE id = ? AND user_id = ?', args: [id, userId] },
     'getCategoryById',
   );
   return (result.rows[0] as unknown as CategoryRow | undefined) ?? null;
@@ -31,11 +32,13 @@ async function loadCategoryRow(id: number): Promise<CategoryRow | null> {
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
+    await ensureUserCategories(userId);
     const includeArchived = req.query.includeArchived === '1';
     const sql = includeArchived
-      ? 'SELECT * FROM categories ORDER BY sort_order ASC, id ASC'
-      : 'SELECT * FROM categories WHERE is_archived = 0 ORDER BY sort_order ASC, id ASC';
-    const result = await trackedExecute(sql, 'listCategories');
+      ? 'SELECT * FROM categories WHERE user_id = ? ORDER BY sort_order ASC, id ASC'
+      : 'SELECT * FROM categories WHERE user_id = ? AND is_archived = 0 ORDER BY sort_order ASC, id ASC';
+    const result = await trackedExecute({ sql, args: [userId] }, 'listCategories');
     const rows = result.rows as unknown as CategoryRow[];
     res.json(rows.map(categoryRowToCategory));
   } catch (err) {
@@ -60,27 +63,28 @@ router.get('/', async (req: Request, res: Response) => {
  */
 router.get('/:id', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'Invalid id' });
 
-    const row = await loadCategoryRow(id);
+    const row = await loadCategoryRow(id, userId);
     if (!row) return res.status(404).json({ message: 'Category not found' });
 
     // Compute live dependents counts so the UI can warn before archiving.
     const recurring = await trackedExecute(
-      { sql: 'SELECT COUNT(*) AS c FROM recurring_expenses WHERE category_id = ? AND is_active = 1', args: [id] },
+      { sql: 'SELECT COUNT(*) AS c FROM recurring_expenses WHERE category_id = ? AND user_id = ? AND is_active = 1', args: [id, userId] },
       'countActiveRecurringForCategory',
     );
     const currentMonth = new Date().toISOString().slice(0, 7);
     const budgets = await trackedExecute(
-      { sql: 'SELECT COUNT(*) AS c FROM category_budgets WHERE category_id = ? AND month >= ?', args: [id, currentMonth] },
+      { sql: 'SELECT COUNT(*) AS c FROM category_budgets WHERE category_id = ? AND user_id = ? AND month >= ?', args: [id, userId, currentMonth] },
       'countActiveBudgetsForCategory',
     );
     const last30 = new Date();
     last30.setDate(last30.getDate() - 30);
     const since = last30.toISOString();
     const expensesRecent = await trackedExecute(
-      { sql: 'SELECT COUNT(*) AS c FROM expenses WHERE category_id = ? AND created_at >= ?', args: [id, since] },
+      { sql: 'SELECT COUNT(*) AS c FROM expenses WHERE category_id = ? AND user_id = ? AND created_at >= ?', args: [id, userId, since] },
       'countRecentExpensesForCategory',
     );
 
@@ -121,6 +125,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const { name, icon, color } = req.body ?? {};
     if (typeof name !== 'string' || name.trim().length === 0) {
       return res.status(400).json({ message: 'name is required' });
@@ -134,7 +139,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     const trimmedName = name.trim();
     const existing = await trackedExecute(
-      { sql: 'SELECT id FROM categories WHERE LOWER(name) = LOWER(?) LIMIT 1', args: [trimmedName] },
+      { sql: 'SELECT id FROM categories WHERE user_id = ? AND LOWER(name) = LOWER(?) LIMIT 1', args: [userId, trimmedName] },
       'checkCategoryNameUnique',
     );
     if (existing.rows.length > 0) {
@@ -142,19 +147,19 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const maxResult = await trackedExecute(
-      'SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories',
+      { sql: 'SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories WHERE user_id = ?', args: [userId] },
       'getMaxCategorySortOrder',
     );
     const nextOrder = Number((maxResult.rows[0] as unknown as { m: number }).m) + 1;
 
     const insert = await trackedExecute(
       {
-        sql: 'INSERT INTO categories (name, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, 0)',
-        args: [trimmedName, icon.trim(), color, nextOrder],
+        sql: 'INSERT INTO categories (name, icon, color, sort_order, is_system, user_id) VALUES (?, ?, ?, ?, 0, ?)',
+        args: [trimmedName, icon.trim(), color, nextOrder, userId],
       },
       'createCategory',
     );
-    const row = await loadCategoryRow(Number(insert.lastInsertRowid));
+    const row = await loadCategoryRow(Number(insert.lastInsertRowid), userId);
     if (!row) return res.status(500).json({ message: 'Failed to load created category' });
     res.status(201).json(categoryRowToCategory(row));
   } catch (err) {
@@ -182,10 +187,11 @@ router.post('/', async (req: Request, res: Response) => {
  */
 router.put('/:id', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'Invalid id' });
 
-    const existing = await loadCategoryRow(id);
+    const existing = await loadCategoryRow(id, userId);
     if (!existing) return res.status(404).json({ message: 'Category not found' });
 
     const { name, icon, color, sortOrder, isArchived } = req.body ?? {};
@@ -202,7 +208,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       const trimmedName = name.trim();
       // Reject duplicates (case-insensitive), allowing a no-op rename to the same row.
       const dup = await trackedExecute(
-        { sql: 'SELECT id FROM categories WHERE LOWER(name) = LOWER(?) AND id != ? LIMIT 1', args: [trimmedName, id] },
+        { sql: 'SELECT id FROM categories WHERE user_id = ? AND LOWER(name) = LOWER(?) AND id != ? LIMIT 1', args: [userId, trimmedName, id] },
         'checkCategoryRenameUnique',
       );
       if (dup.rows.length > 0) {
@@ -240,9 +246,9 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     if (sets.length === 0) return res.status(400).json({ message: 'No fields to update' });
 
-    args.push(id);
+    args.push(id, userId);
     await trackedExecute(
-      { sql: `UPDATE categories SET ${sets.join(', ')} WHERE id = ?`, args },
+      { sql: `UPDATE categories SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, args },
       'updateCategory',
     );
 
@@ -253,12 +259,12 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (name !== undefined) {
       const trimmedName = (name as string).trim();
       await trackedExecute(
-        { sql: 'UPDATE category_budgets SET category = ? WHERE category_id = ?', args: [trimmedName, id] },
+        { sql: 'UPDATE category_budgets SET category = ? WHERE category_id = ? AND user_id = ?', args: [trimmedName, id, userId] },
         'cascadeRenameToBudgets',
       );
     }
 
-    const updated = await loadCategoryRow(id);
+    const updated = await loadCategoryRow(id, userId);
     if (!updated) return res.status(500).json({ message: 'Failed to load updated category' });
     res.json(categoryRowToCategory(updated));
   } catch (err) {
@@ -284,17 +290,18 @@ router.put('/:id', async (req: Request, res: Response) => {
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'Invalid id' });
 
-    const existing = await loadCategoryRow(id);
+    const existing = await loadCategoryRow(id, userId);
     if (!existing) return res.status(404).json({ message: 'Category not found' });
     if (existing.is_system === 1) {
       return res.status(403).json({ message: 'System category cannot be archived' });
     }
 
     await trackedExecute(
-      { sql: 'UPDATE categories SET is_archived = 1 WHERE id = ?', args: [id] },
+      { sql: 'UPDATE categories SET is_archived = 1 WHERE id = ? AND user_id = ?', args: [id, userId] },
       'archiveCategory',
     );
     res.status(204).send();

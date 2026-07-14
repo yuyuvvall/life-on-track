@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import db, { getPeriodStart, trackedExecute } from '../db/index.js';
+import { getUserId } from '../middleware/auth.js';
 import type { GoalRow, GoalLogRow, GoalStats } from '../types.js';
 import { goalRowToGoal, goalLogRowToGoalLog } from '../types.js';
 
@@ -22,16 +23,21 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Goal'
  */
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const result = await trackedExecute(`
+    const userId = getUserId(req);
+    const result = await trackedExecute({
+      sql: `
       SELECT g.* FROM goals g
-      WHERE g.is_active = 1 
+      WHERE g.is_active = 1
+        AND g.user_id = ?
         AND NOT EXISTS (
           SELECT 1 FROM goal_relations gr WHERE gr.child_goal_id = g.id
         )
       ORDER BY g.created_at DESC
-    `, 'getAllTopLevelGoals');
+    `,
+      args: [userId]
+    }, 'getAllTopLevelGoals');
     const goals = result.rows as unknown as GoalRow[];
     await recalculateFrequencyGoalsCurrentValue(goals);
     res.json(goals.map(goalRowToGoal));
@@ -64,9 +70,10 @@ router.get('/', async (_req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const result = await trackedExecute({
-      sql: 'SELECT * FROM goals WHERE id = ?',
-      args: [req.params.id]
+      sql: 'SELECT * FROM goals WHERE id = ? AND user_id = ?',
+      args: [req.params.id, userId]
     }, 'getGoalById');
     
     if (result.rows.length === 0) {
@@ -104,9 +111,10 @@ router.get('/:id', async (req, res) => {
  */
 router.get('/:id/stats', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const goalResult = await trackedExecute({
-      sql: 'SELECT * FROM goals WHERE id = ?',
-      args: [req.params.id]
+      sql: 'SELECT * FROM goals WHERE id = ? AND user_id = ?',
+      args: [req.params.id, userId]
     }, 'getGoalForStats');
     
     if (goalResult.rows.length === 0) {
@@ -125,9 +133,9 @@ router.get('/:id/stats', async (req, res) => {
     const subGoalsResult = await trackedExecute({
       sql: `SELECT g.* FROM goals g
             INNER JOIN goal_relations gr ON gr.child_goal_id = g.id
-            WHERE gr.parent_goal_id = ? AND g.is_active = 1 
+            WHERE gr.parent_goal_id = ? AND g.is_active = 1 AND g.user_id = ?
             ORDER BY g.created_at ASC`,
-      args: [req.params.id]
+      args: [req.params.id, userId]
     }, 'getSubGoalsForStats');
     const subGoals = subGoalsResult.rows as unknown as GoalRow[];
     await recalculateFrequencyGoalsCurrentValue(subGoals);
@@ -142,12 +150,13 @@ router.get('/:id/stats', async (req, res) => {
 // Get sub-goals for a parent goal (via junction table)
 router.get('/:id/subgoals', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const result = await trackedExecute({
       sql: `SELECT g.* FROM goals g
             INNER JOIN goal_relations gr ON gr.child_goal_id = g.id
-            WHERE gr.parent_goal_id = ? AND g.is_active = 1 
+            WHERE gr.parent_goal_id = ? AND g.is_active = 1 AND g.user_id = ?
             ORDER BY g.created_at ASC`,
-      args: [req.params.id]
+      args: [req.params.id, userId]
     }, 'getSubGoals');
     const subGoals = result.rows as unknown as GoalRow[];
     res.json(subGoals.map(goalRowToGoal));
@@ -159,7 +168,17 @@ router.get('/:id/subgoals', async (req, res) => {
 // Get goal logs
 router.get('/:id/logs', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { limit = '30' } = req.query;
+
+    const goalResult = await trackedExecute({
+      sql: 'SELECT id FROM goals WHERE id = ? AND user_id = ?',
+      args: [req.params.id, userId]
+    }, 'checkGoalOwnershipForLogs');
+    if (goalResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Goal not found' });
+    }
+
     const result = await trackedExecute({
       sql: 'SELECT * FROM goal_logs WHERE goal_id = ? ORDER BY log_date DESC LIMIT ?',
       args: [req.params.id, parseInt(limit as string)]
@@ -195,7 +214,8 @@ router.get('/:id/logs', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { 
+    const userId = getUserId(req);
+    const {
       title, 
       goalType = 'frequency', 
       targetValue, 
@@ -213,8 +233,8 @@ router.post('/', async (req, res) => {
     // If creating a sub-goal, verify parent exists
     if (parentId) {
       const parentResult = await trackedExecute({
-        sql: 'SELECT * FROM goals WHERE id = ?',
-        args: [parentId]
+        sql: 'SELECT * FROM goals WHERE id = ? AND user_id = ?',
+        args: [parentId, userId]
       }, 'verifyParentGoalExists');
       if (parentResult.rows.length === 0) {
         return res.status(404).json({ message: 'Parent goal not found' });
@@ -225,17 +245,18 @@ router.post('/', async (req, res) => {
     
     // Insert the goal
     await trackedExecute({
-      sql: `INSERT INTO goals (id, title, goal_type, target_value, unit, total_pages, frequency_period, target_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO goals (id, title, goal_type, target_value, unit, total_pages, frequency_period, target_date, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         id,
-        title, 
-        goalType, 
-        targetValue || 0, 
-        unit || '', 
+        title,
+        goalType,
+        targetValue || 0,
+        unit || '',
         goalType === 'reading' ? totalPages : null,
         goalType === 'frequency' ? (frequencyPeriod || 'weekly') : null,
-        targetDate || null
+        targetDate || null,
+        userId
       ]
     }, 'createGoal');
 
@@ -262,12 +283,13 @@ router.post('/', async (req, res) => {
 // Update goal
 router.patch('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { id } = req.params;
     const { title, targetValue, unit, totalPages, currentPage, currentValue, targetDate, isActive } = req.body;
 
     const existingResult = await trackedExecute({
-      sql: 'SELECT * FROM goals WHERE id = ?',
-      args: [id]
+      sql: 'SELECT * FROM goals WHERE id = ? AND user_id = ?',
+      args: [id, userId]
     }, 'checkGoalExistsForUpdate');
     if (existingResult.rows.length === 0) {
       return res.status(404).json({ message: 'Goal not found' });
@@ -310,9 +332,9 @@ router.patch('/:id', async (req, res) => {
     }
 
     if (updates.length > 0) {
-      values.push(id);
+      values.push(id, userId);
       await trackedExecute({
-        sql: `UPDATE goals SET ${updates.join(', ')} WHERE id = ?`,
+        sql: `UPDATE goals SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
         args: values
       }, 'updateGoal');
     }
@@ -356,12 +378,13 @@ router.patch('/:id', async (req, res) => {
  */
 router.post('/:id/logs', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { id } = req.params;
     const { value, note, logDate } = req.body;
 
     const goalResult = await trackedExecute({
-      sql: 'SELECT * FROM goals WHERE id = ?',
-      args: [id]
+      sql: 'SELECT * FROM goals WHERE id = ? AND user_id = ?',
+      args: [id, userId]
     }, 'getGoalForLogging');
     if (goalResult.rows.length === 0) {
       return res.status(404).json({ message: 'Goal not found' });
@@ -471,13 +494,16 @@ router.post('/:id/logs', async (req, res) => {
  */
 router.patch('/:goalId/logs/:logId', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { goalId, logId } = req.params;
     const { value, note, logDate } = req.body;
 
-    // Check log exists
+    // Check log exists (and its goal belongs to the user)
     const existingResult = await trackedExecute({
-      sql: 'SELECT * FROM goal_logs WHERE id = ? AND goal_id = ?',
-      args: [logId, goalId]
+      sql: `SELECT gl.* FROM goal_logs gl
+              JOIN goals g ON g.id = gl.goal_id
+             WHERE gl.id = ? AND gl.goal_id = ? AND g.user_id = ?`,
+      args: [logId, goalId, userId]
     }, 'getGoalLogForUpdate');
     
     if (existingResult.rows.length === 0) {
@@ -586,9 +612,10 @@ router.patch('/:goalId/logs/:logId', async (req, res) => {
 // Delete goal (soft delete)
 router.delete('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const result = await trackedExecute({
-      sql: 'UPDATE goals SET is_active = 0 WHERE id = ?',
-      args: [req.params.id]
+      sql: 'UPDATE goals SET is_active = 0 WHERE id = ? AND user_id = ?',
+      args: [req.params.id, userId]
     }, 'softDeleteGoal');
 
     if (result.rowsAffected === 0) {

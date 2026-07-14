@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getWeekStart, getWeekEnd, trackedExecute } from '../db/index.js';
+import { getUserId } from '../middleware/auth.js';
 import type { WorkLogRow, ExpenseRow, GoalRow, WeeklySummary } from '../types.js';
 import { workLogRowToWorkLog, expenseRowToExpense, goalRowToGoal } from '../types.js';
 import { recalculateFrequencyGoalsCurrentValue } from './goals.js';
@@ -30,15 +31,16 @@ const router = Router();
  */
 router.get('/', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const weekStart = (req.query.weekStart as string) || getWeekStart();
     const weekEnd = getWeekEnd(weekStart);
 
     // Get work logs for the week
     const workLogsResult = await trackedExecute({
-      sql: `SELECT * FROM work_logs 
-            WHERE log_date BETWEEN ? AND ?
+      sql: `SELECT * FROM work_logs
+            WHERE log_date BETWEEN ? AND ? AND user_id = ?
             ORDER BY log_date ASC`,
-      args: [weekStart, weekEnd]
+      args: [weekStart, weekEnd, userId]
     }, 'getWeeklyWorkLogs');
     const workLogs = workLogsResult.rows as unknown as WorkLogRow[];
 
@@ -47,9 +49,9 @@ router.get('/', async (req, res) => {
     const expensesResult = await trackedExecute({
       sql: `SELECT ${EXPENSE_COLUMNS}
             FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
-            WHERE DATE(expenses.created_at) BETWEEN ? AND ?
+            WHERE DATE(expenses.created_at) BETWEEN ? AND ? AND expenses.user_id = ?
             ORDER BY expenses.created_at DESC`,
-      args: [weekStart, weekEnd]
+      args: [weekStart, weekEnd, userId]
     }, 'getWeeklyExpenses');
     const expenses = expensesResult.rows as unknown as ExpenseRow[];
 
@@ -76,7 +78,10 @@ router.get('/', async (req, res) => {
       .map((l) => l.missed_opportunity_note as string);
 
     // Get goals with progress
-    const goalsResult = await trackedExecute('SELECT * FROM goals WHERE is_active = 1', 'getActiveGoalsForSummary');
+    const goalsResult = await trackedExecute({
+      sql: 'SELECT * FROM goals WHERE is_active = 1 AND user_id = ?',
+      args: [userId]
+    }, 'getActiveGoalsForSummary');
     const goals = goalsResult.rows as unknown as GoalRow[];
     await recalculateFrequencyGoalsCurrentValue(goals);
 
@@ -137,10 +142,11 @@ router.get('/', async (req, res) => {
  */
 router.post('/reflection', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const reflection = req.body.reflection;
     await trackedExecute({
-      sql: `INSERT INTO weekly_reflections (week_start, reflection_text) VALUES (?, ?)`,
-      args: [getWeekStart(), reflection]
+      sql: `INSERT INTO weekly_reflections (week_start, reflection_text, user_id) VALUES (?, ?, ?)`,
+      args: [getWeekStart(), reflection, userId]
     }, 'submitWeeklyReflection');
     res.json({ message: 'Reflection submitted successfully' });
   } catch (err) {

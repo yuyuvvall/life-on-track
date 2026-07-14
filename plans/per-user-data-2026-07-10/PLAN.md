@@ -56,6 +56,8 @@ Almost none — the API shape is unchanged; data just comes back filtered. React
 
 ## Migration of existing data (owner backfill)
 
+> Owner's production Clerk user id (provided 2026-07-10): `user_3GJXlhZWXmxOe4DDUSx90PVoR3J` — use as `MIGRATE_OWNER_USER_ID` at deploy time.
+
 1. Deploy current auth build → sign up in production → copy your Clerk user id (`user_...`) from the Clerk dashboard (Users page).
 2. Migration adds the columns (idempotent `ALTER TABLE ... ADD COLUMN user_id TEXT` in `initializeDatabase()`, matching the existing migration style) + `CREATE INDEX IF NOT EXISTS idx_<table>_user ON <table>(user_id)`.
 3. Backfill script (one-off, run with `MIGRATE_OWNER_USER_ID` env var): `UPDATE <each top-level table> SET user_id = ? WHERE user_id IS NULL`.

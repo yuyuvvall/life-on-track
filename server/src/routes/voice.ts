@@ -11,6 +11,7 @@ const router = Router();
 const MAX_TEXT_LENGTH = 500;
 
 async function logVoiceCommand(
+  userId: string | null,
   text: string,
   parsed: VoiceIntent | null,
   status: 'created' | 'unclear' | 'error',
@@ -20,9 +21,9 @@ async function logVoiceCommand(
 ) {
   // Best-effort audit trail; never fail the request on it.
   trackedExecute({
-    sql: `INSERT INTO voice_commands (text, parsed, status, entity_kind, entity_id, error)
-          VALUES (?, ?, ?, ?, ?, ?)`,
-    args: [text, parsed ? JSON.stringify(parsed) : null, status, entityKind, entityId, error],
+    sql: `INSERT INTO voice_commands (user_id, text, parsed, status, entity_kind, entity_id, error)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [userId, text, parsed ? JSON.stringify(parsed) : null, status, entityKind, entityId, error],
   }, 'logVoiceCommand').catch(() => {});
 }
 
@@ -60,7 +61,7 @@ async function logVoiceCommand(
  *       401:
  *         description: Missing or wrong X-Api-Key
  *       503:
- *         description: Voice commands not configured on the server
+ *         description: Voice commands not configured on the server (VOICE_API_KEY or VOICE_USER_ID missing)
  */
 router.post('/command', async (req, res) => {
   const expectedKey = process.env.VOICE_API_KEY;
@@ -69,6 +70,10 @@ router.post('/command', async (req, res) => {
   }
   if (req.header('X-Api-Key') !== expectedKey) {
     return res.status(401).json({ message: 'Invalid API key' });
+  }
+  const voiceUserId = process.env.VOICE_USER_ID;
+  if (!voiceUserId) {
+    return res.status(503).json({ message: 'Voice commands are not configured (VOICE_USER_ID is missing)' });
   }
 
   const { text } = req.body ?? {};
@@ -83,14 +88,17 @@ router.post('/command', async (req, res) => {
   let intent: VoiceIntent;
   try {
     const categoriesResult = await trackedExecute(
-      'SELECT name FROM categories WHERE is_archived = 0 ORDER BY sort_order',
+      {
+        sql: 'SELECT name FROM categories WHERE is_archived = 0 AND user_id = ? ORDER BY sort_order',
+        args: [voiceUserId],
+      },
       'getCategoriesForVoice',
     );
     const knownCategories = categoriesResult.rows.map((r) => String(r.name));
     intent = await parseVoiceCommand(command, knownCategories);
   } catch (err) {
     const message = (err as Error).message;
-    await logVoiceCommand(command, null, 'error', null, null, message);
+    await logVoiceCommand(voiceUserId, command, null, 'error', null, null, message);
     return res.status(502).json({ message: `Could not parse the command: ${message}` });
   }
 
@@ -99,9 +107,9 @@ router.post('/command', async (req, res) => {
       case 'task': {
         const id = uuidv4();
         await trackedExecute({
-          sql: `INSERT INTO tasks (id, parent_id, title, category, deadline)
-                VALUES (?, NULL, ?, ?, ?)`,
-          args: [id, intent.title, intent.category, intent.deadline],
+          sql: `INSERT INTO tasks (id, parent_id, title, category, deadline, user_id)
+                VALUES (?, NULL, ?, ?, ?, ?)`,
+          args: [id, intent.title, intent.category, intent.deadline, voiceUserId],
         }, 'createTaskFromVoice');
 
         const taskResult = await trackedExecute(
@@ -110,7 +118,7 @@ router.post('/command', async (req, res) => {
         );
         const task = taskRowToTask(taskResult.rows[0] as unknown as TaskRow, []);
 
-        await logVoiceCommand(command, intent, 'created', 'task', id, null);
+        await logVoiceCommand(voiceUserId, command, intent, 'created', 'task', id, null);
         const deadlinePart = intent.deadline ? `, due ${intent.deadline.slice(0, 10)}` : '';
         return res.status(201).json({
           status: 'ok',
@@ -120,11 +128,11 @@ router.post('/command', async (req, res) => {
         });
       }
       case 'expense': {
-        const categoryId = await resolveCategoryId(intent.category);
+        const categoryId = await resolveCategoryId(voiceUserId, intent.category);
         const result = await trackedExecute({
-          sql: `INSERT INTO expenses (amount, category_id, note, created_at, tag_id, card_id, face_amount)
-                VALUES (?, ?, ?, ?, NULL, NULL, NULL)`,
-          args: [intent.amount, categoryId, intent.note, new Date().toISOString()],
+          sql: `INSERT INTO expenses (amount, category_id, note, created_at, tag_id, card_id, face_amount, user_id)
+                VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?)`,
+          args: [intent.amount, categoryId, intent.note, new Date().toISOString(), voiceUserId],
         }, 'createExpenseFromVoice');
 
         const expenseId = Number(result.lastInsertRowid);
@@ -136,7 +144,7 @@ router.post('/command', async (req, res) => {
         }, 'getVoiceCreatedExpense');
         const expense = expenseRowToExpense(expenseResult.rows[0] as unknown as ExpenseRow);
 
-        await logVoiceCommand(command, intent, 'created', 'expense', String(expenseId), null);
+        await logVoiceCommand(voiceUserId, command, intent, 'created', 'expense', String(expenseId), null);
         return res.status(201).json({
           status: 'ok',
           kind: 'expense',
@@ -145,7 +153,7 @@ router.post('/command', async (req, res) => {
         });
       }
       default: {
-        await logVoiceCommand(command, intent, 'unclear', null, null, null);
+        await logVoiceCommand(voiceUserId, command, intent, 'unclear', null, null, null);
         return res.status(200).json({
           status: 'unclear',
           confirmation: intent.reason,
@@ -154,7 +162,7 @@ router.post('/command', async (req, res) => {
     }
   } catch (err) {
     const message = (err as Error).message;
-    await logVoiceCommand(command, intent, 'error', null, null, message);
+    await logVoiceCommand(voiceUserId, command, intent, 'error', null, null, message);
     return res.status(500).json({ message });
   }
 });

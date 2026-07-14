@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import type { InValue } from '@libsql/client';
 import db, { trackedExecute } from '../db/index.js';
+import { getUserId } from '../middleware/auth.js';
 import {
   PrepaidCardRow,
   CardLoadRow,
@@ -13,9 +14,9 @@ const router = Router();
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
-async function loadCardRow(id: number): Promise<PrepaidCardRow | null> {
+async function loadCardRow(id: number, userId: string): Promise<PrepaidCardRow | null> {
   const result = await trackedExecute(
-    { sql: 'SELECT * FROM prepaid_cards WHERE id = ?', args: [id] },
+    { sql: 'SELECT * FROM prepaid_cards WHERE id = ? AND user_id = ?', args: [id, userId] },
     'getCardById',
   );
   return (result.rows[0] as unknown as PrepaidCardRow | undefined) ?? null;
@@ -58,11 +59,12 @@ function validateRate(rate: unknown): number | null {
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const includeArchived = req.query.includeArchived === '1';
     const sql = includeArchived
-      ? 'SELECT * FROM prepaid_cards ORDER BY is_archived ASC, id ASC'
-      : 'SELECT * FROM prepaid_cards WHERE is_archived = 0 ORDER BY id ASC';
-    const result = await trackedExecute(sql, 'listCards');
+      ? 'SELECT * FROM prepaid_cards WHERE user_id = ? ORDER BY is_archived ASC, id ASC'
+      : 'SELECT * FROM prepaid_cards WHERE is_archived = 0 AND user_id = ? ORDER BY id ASC';
+    const result = await trackedExecute({ sql, args: [userId] }, 'listCards');
     const rows = result.rows as unknown as PrepaidCardRow[];
     const cards = await Promise.all(rows.map(toPrepaidCard));
     res.json(cards);
@@ -88,10 +90,11 @@ router.get('/', async (req: Request, res: Response) => {
  */
 router.get('/:id', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'Invalid id' });
 
-    const row = await loadCardRow(id);
+    const row = await loadCardRow(id, userId);
     if (!row) return res.status(404).json({ message: 'Card not found' });
 
     const loads = await trackedExecute(
@@ -99,7 +102,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       'countLoadsForCard',
     );
     const payments = await trackedExecute(
-      { sql: 'SELECT COUNT(*) AS c FROM expenses WHERE card_id = ?', args: [id] },
+      { sql: 'SELECT COUNT(*) AS c FROM expenses WHERE card_id = ? AND user_id = ?', args: [id, userId] },
       'countPaymentsForCard',
     );
 
@@ -139,6 +142,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const { name, icon, color, defaultDiscountRate } = req.body ?? {};
     if (typeof name !== 'string' || name.trim().length === 0) {
       return res.status(400).json({ message: 'name is required' });
@@ -156,12 +160,12 @@ router.post('/', async (req: Request, res: Response) => {
 
     const insert = await trackedExecute(
       {
-        sql: 'INSERT INTO prepaid_cards (name, icon, color, default_discount_rate) VALUES (?, ?, ?, ?)',
-        args: [name.trim(), icon.trim(), color, rate],
+        sql: 'INSERT INTO prepaid_cards (name, icon, color, default_discount_rate, user_id) VALUES (?, ?, ?, ?, ?)',
+        args: [name.trim(), icon.trim(), color, rate, userId],
       },
       'createCard',
     );
-    const row = await loadCardRow(Number(insert.lastInsertRowid));
+    const row = await loadCardRow(Number(insert.lastInsertRowid), userId);
     if (!row) return res.status(500).json({ message: 'Failed to load created card' });
     res.status(201).json(await toPrepaidCard(row));
   } catch (err) {
@@ -187,10 +191,11 @@ router.post('/', async (req: Request, res: Response) => {
  */
 router.put('/:id', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'Invalid id' });
 
-    const existing = await loadCardRow(id);
+    const existing = await loadCardRow(id, userId);
     if (!existing) return res.status(404).json({ message: 'Card not found' });
 
     const { name, icon, color, defaultDiscountRate, isArchived } = req.body ?? {};
@@ -231,13 +236,13 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     if (sets.length === 0) return res.status(400).json({ message: 'No fields to update' });
 
-    args.push(id);
+    args.push(id, userId);
     await trackedExecute(
-      { sql: `UPDATE prepaid_cards SET ${sets.join(', ')} WHERE id = ?`, args },
+      { sql: `UPDATE prepaid_cards SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, args },
       'updateCard',
     );
 
-    const updated = await loadCardRow(id);
+    const updated = await loadCardRow(id, userId);
     if (!updated) return res.status(500).json({ message: 'Failed to load updated card' });
     res.json(await toPrepaidCard(updated));
   } catch (err) {
@@ -262,14 +267,15 @@ router.put('/:id', async (req: Request, res: Response) => {
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'Invalid id' });
 
-    const existing = await loadCardRow(id);
+    const existing = await loadCardRow(id, userId);
     if (!existing) return res.status(404).json({ message: 'Card not found' });
 
     await trackedExecute(
-      { sql: 'UPDATE prepaid_cards SET is_archived = 1 WHERE id = ?', args: [id] },
+      { sql: 'UPDATE prepaid_cards SET is_archived = 1 WHERE id = ? AND user_id = ?', args: [id, userId] },
       'archiveCard',
     );
     res.status(204).send();
@@ -296,8 +302,12 @@ router.delete('/:id', async (req: Request, res: Response) => {
  */
 router.get('/:id/loads', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'Invalid id' });
+
+    const card = await loadCardRow(id, userId);
+    if (!card) return res.status(404).json({ message: 'Card not found' });
 
     const result = await trackedExecute(
       { sql: 'SELECT * FROM card_loads WHERE card_id = ? ORDER BY loaded_at DESC, id DESC', args: [id] },
@@ -341,10 +351,11 @@ router.get('/:id/loads', async (req: Request, res: Response) => {
  */
 router.post('/:id/loads', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'Invalid id' });
 
-    const card = await loadCardRow(id);
+    const card = await loadCardRow(id, userId);
     if (!card) return res.status(404).json({ message: 'Card not found' });
 
     const { cashPaid, discountRate, faceValue, loadedAt, note } = req.body ?? {};
@@ -392,7 +403,7 @@ router.post('/:id/loads', async (req: Request, res: Response) => {
       'getCreatedCardLoad',
     );
     const loadRow = loadResult.rows[0] as unknown as CardLoadRow;
-    const updatedCard = await loadCardRow(id);
+    const updatedCard = await loadCardRow(id, userId);
 
     res.status(201).json({
       load: cardLoadRowToCardLoad(loadRow),
@@ -415,11 +426,15 @@ router.post('/:id/loads', async (req: Request, res: Response) => {
  */
 router.put('/:id/loads/:loadId', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     const loadId = Number(req.params.loadId);
     if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(loadId) || loadId <= 0) {
       return res.status(400).json({ message: 'Invalid id' });
     }
+
+    const card = await loadCardRow(id, userId);
+    if (!card) return res.status(404).json({ message: 'Card not found' });
 
     const existing = await trackedExecute(
       { sql: 'SELECT * FROM card_loads WHERE id = ? AND card_id = ?', args: [loadId, id] },
@@ -487,11 +502,15 @@ router.put('/:id/loads/:loadId', async (req: Request, res: Response) => {
  */
 router.delete('/:id/loads/:loadId', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     const loadId = Number(req.params.loadId);
     if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(loadId) || loadId <= 0) {
       return res.status(400).json({ message: 'Invalid id' });
     }
+
+    const card = await loadCardRow(id, userId);
+    if (!card) return res.status(404).json({ message: 'Card not found' });
 
     const existing = await trackedExecute(
       { sql: 'SELECT * FROM card_loads WHERE id = ? AND card_id = ?', args: [loadId, id] },
@@ -529,8 +548,12 @@ router.delete('/:id/loads/:loadId', async (req: Request, res: Response) => {
  */
 router.get('/:id/activity', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'Invalid id' });
+
+    const card = await loadCardRow(id, userId);
+    if (!card) return res.status(404).json({ message: 'Card not found' });
 
     const loadsResult = await trackedExecute(
       { sql: 'SELECT * FROM card_loads WHERE card_id = ?', args: [id] },
@@ -540,8 +563,8 @@ router.get('/:id/activity', async (req: Request, res: Response) => {
       {
         sql: `SELECT e.id, e.amount, e.face_amount, e.note, e.created_at, c.name AS category
                 FROM expenses e LEFT JOIN categories c ON c.id = e.category_id
-               WHERE e.card_id = ?`,
-        args: [id],
+               WHERE e.card_id = ? AND e.user_id = ?`,
+        args: [id, userId],
       },
       'cardActivityPayments',
     );

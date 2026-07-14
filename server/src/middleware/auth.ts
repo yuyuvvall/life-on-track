@@ -1,6 +1,19 @@
 import type { NextFunction, Request, Response } from 'express';
 import { getAuth } from '@clerk/express';
 
+/**
+ * Returns the authenticated Clerk user id. Routes are mounted behind
+ * requireAuth, so this is always set; throwing keeps a missing id from
+ * ever widening a query to all users' rows.
+ */
+export function getUserId(req: Request): string {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    throw new Error('getUserId called on an unauthenticated request');
+  }
+  return userId;
+}
+
 // Fail closed: when Clerk keys are absent, protected routes return 503
 // instead of silently serving data unauthenticated.
 export const isClerkConfigured = Boolean(

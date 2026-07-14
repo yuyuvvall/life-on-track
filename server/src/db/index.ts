@@ -86,11 +86,13 @@ CREATE TABLE IF NOT EXISTS subtasks (
 -- 4. Work Logs
 CREATE TABLE IF NOT EXISTS work_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    log_date DATE UNIQUE NOT NULL,
+    log_date DATE NOT NULL,
     integrity_score INTEGER CHECK (integrity_score IN (0, 1)),
     missed_opportunity_note TEXT,
     success_note TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    user_id TEXT,
+    UNIQUE(user_id, log_date)
 );
 
 -- 5. Expenses
@@ -122,7 +124,8 @@ CREATE TABLE IF NOT EXISTS category_budgets (
     month TEXT NOT NULL CHECK (month GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'),
     amount REAL NOT NULL CHECK (amount >= 0),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(category, month)
+    user_id TEXT,
+    UNIQUE(user_id, category, month)
 );
 
 -- 5c. Expense Tags (reusable snapshots for frequent expenses)
@@ -142,13 +145,15 @@ CREATE TABLE IF NOT EXISTS expense_tags (
 -- 5d. Expense Categories (user-editable; replaces hard-coded frontend list)
 CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    name TEXT NOT NULL COLLATE NOCASE,
     icon TEXT NOT NULL,
     color TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
     is_archived INTEGER NOT NULL DEFAULT 0,
     is_system INTEGER NOT NULL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    user_id TEXT,
+    UNIQUE(user_id, name)
 );
 
 -- 5e. Prepaid Cards (load up-front, spend like a credit card, often at a discount)
@@ -305,7 +310,129 @@ async function initializeDatabase() {
   try { await db.execute('ALTER TABLE expenses ADD COLUMN face_amount REAL'); console.log('[Database] Added face_amount to expenses'); } catch {}
   try { await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_card ON expenses(card_id)'); } catch {}
 
-  await seedAndBackfillCategories();
+  await migrateToPerUserData();
+}
+
+// Top-level tables that carry data ownership. Child tables (subtasks, goal_logs,
+// goal_relations, card_loads, card_payment_allocations, expense_repayments) are
+// scoped through their parent's user_id and deliberately have no column of their own.
+const USER_SCOPED_TABLES: ReadonlyArray<string> = [
+  'goals',
+  'tasks',
+  'work_logs',
+  'expenses',
+  'recurring_expenses',
+  'category_budgets',
+  'expense_tags',
+  'categories',
+  'prepaid_cards',
+  'weekly_reflections',
+  'voice_commands',
+];
+
+async function migrateToPerUserData() {
+  // Step 1: add user_id everywhere (idempotent; ALTER fails if it exists)
+  for (const table of USER_SCOPED_TABLES) {
+    try {
+      await db.execute(`ALTER TABLE ${table} ADD COLUMN user_id TEXT`);
+      console.log(`[Database] Added user_id to ${table}`);
+    } catch {}
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_${table}_user ON ${table}(user_id)`);
+  }
+
+  // Step 2: rebuild tables whose UNIQUE constraints must become per-user.
+  // db.migrate() wraps the batch in PRAGMA foreign_keys=off/on so dropping a
+  // table other tables reference (categories) is safe and atomic.
+  await rebuildIfLegacyUnique('work_logs', [
+    `CREATE TABLE work_logs_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        log_date DATE NOT NULL,
+        integrity_score INTEGER CHECK (integrity_score IN (0, 1)),
+        missed_opportunity_note TEXT,
+        success_note TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        user_id TEXT,
+        UNIQUE(user_id, log_date)
+    )`,
+    `INSERT INTO work_logs_new (id, log_date, integrity_score, missed_opportunity_note, success_note, created_at, user_id)
+       SELECT id, log_date, integrity_score, missed_opportunity_note, success_note, created_at, user_id FROM work_logs`,
+    'DROP TABLE work_logs',
+    'ALTER TABLE work_logs_new RENAME TO work_logs',
+    'CREATE INDEX IF NOT EXISTS idx_work_logs_date ON work_logs(log_date)',
+    'CREATE INDEX IF NOT EXISTS idx_work_logs_user ON work_logs(user_id)',
+  ]);
+
+  await rebuildIfLegacyUnique('categories', [
+    `CREATE TABLE categories_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL COLLATE NOCASE,
+        icon TEXT NOT NULL,
+        color TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_archived INTEGER NOT NULL DEFAULT 0,
+        is_system INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        user_id TEXT,
+        UNIQUE(user_id, name)
+    )`,
+    `INSERT INTO categories_new (id, name, icon, color, sort_order, is_archived, is_system, created_at, user_id)
+       SELECT id, name, icon, color, sort_order, is_archived, is_system, created_at, user_id FROM categories`,
+    'DROP TABLE categories',
+    'ALTER TABLE categories_new RENAME TO categories',
+    'CREATE INDEX IF NOT EXISTS idx_categories_archived ON categories(is_archived, sort_order)',
+    'CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id)',
+  ]);
+
+  await rebuildIfLegacyUnique('category_budgets', [
+    `CREATE TABLE category_budgets_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category TEXT NOT NULL,
+        month TEXT NOT NULL CHECK (month GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'),
+        amount REAL NOT NULL CHECK (amount >= 0),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        category_id INTEGER REFERENCES categories(id),
+        user_id TEXT,
+        UNIQUE(user_id, category, month)
+    )`,
+    `INSERT INTO category_budgets_new (id, category, month, amount, created_at, category_id, user_id)
+       SELECT id, category, month, amount, created_at, category_id, user_id FROM category_budgets`,
+    'DROP TABLE category_budgets',
+    'ALTER TABLE category_budgets_new RENAME TO category_budgets',
+    'CREATE INDEX IF NOT EXISTS idx_category_budgets_month ON category_budgets(month)',
+    'CREATE INDEX IF NOT EXISTS idx_category_budgets_user ON category_budgets(user_id)',
+  ]);
+
+  // Step 3: one-off owner backfill. Set MIGRATE_OWNER_USER_ID to a Clerk user id
+  // to claim every unowned row (the pre-auth data) for that user. Safe to leave
+  // set: it only ever touches rows where user_id IS NULL.
+  const owner = process.env.MIGRATE_OWNER_USER_ID;
+  if (owner) {
+    for (const table of USER_SCOPED_TABLES) {
+      const result = await db.execute({
+        sql: `UPDATE ${table} SET user_id = ? WHERE user_id IS NULL`,
+        args: [owner],
+      });
+      if (result.rowsAffected > 0) {
+        console.log(`[Database] Backfilled ${result.rowsAffected} ${table} rows to owner`);
+      }
+    }
+  }
+}
+
+/**
+ * Rebuilds a table (SQLite can't alter UNIQUE constraints in place) unless its
+ * current definition already contains the per-user constraint. Detection reads
+ * the live DDL from sqlite_master, so re-running is a no-op.
+ */
+async function rebuildIfLegacyUnique(table: string, statements: string[]) {
+  const ddl = await db.execute({
+    sql: "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+    args: [table],
+  });
+  const sql = String((ddl.rows[0] as unknown as { sql: string } | undefined)?.sql ?? '');
+  if (sql.includes('UNIQUE(user_id')) return;
+  await db.migrate(statements);
+  console.log(`[Database] Rebuilt ${table} with per-user uniqueness`);
 }
 
 const DEFAULT_CATEGORIES: ReadonlyArray<{ name: string; icon: string; color: string; isSystem: 0 | 1 }> = [
@@ -325,114 +452,53 @@ const FALLBACK_PALETTE = [
   '#64748b', '#6b7280', '#78716c', '#0ea5e9',
 ];
 
-const TABLES_WITH_CATEGORY: ReadonlyArray<string> = [
-  'expenses',
-  'recurring_expenses',
-  'category_budgets',
-  'expense_tags',
-];
+/**
+ * Seeds the default category set for a user who has none yet. Called lazily
+ * from the categories routes (first read after sign-up), so new users get a
+ * working expense screen without a users table or Clerk webhook.
+ */
+export async function ensureUserCategories(userId: string): Promise<void> {
+  const existing = await db.execute({
+    sql: 'SELECT COUNT(*) AS c FROM categories WHERE user_id = ?',
+    args: [userId],
+  });
+  if (Number((existing.rows[0] as unknown as { c: number }).c) > 0) return;
 
-async function seedAndBackfillCategories() {
-  // Step 1: seed defaults if not present (idempotent via UNIQUE on name)
   for (let i = 0; i < DEFAULT_CATEGORIES.length; i++) {
     const c = DEFAULT_CATEGORIES[i];
     await db.execute({
-      sql: 'INSERT OR IGNORE INTO categories (name, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, ?)',
-      args: [c.name, c.icon, c.color, i, c.isSystem],
+      sql: 'INSERT OR IGNORE INTO categories (name, icon, color, sort_order, is_system, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+      args: [c.name, c.icon, c.color, i, c.isSystem, userId],
     });
   }
-
-  // Step 2 + 3: back-fill category_id; auto-create unknown categories.
-  // Each table is wrapped in try/catch because the legacy `category` text
-  // column may already have been dropped on this DB. After the first
-  // successful run, every row has `category_id` and the column drop in the
-  // ALTER block below leaves nothing for the back-fill to do.
-  for (const table of TABLES_WITH_CATEGORY) {
-    try {
-      // First pass: fill from existing categories (case-insensitive name match)
-      await db.execute(`
-        UPDATE ${table}
-           SET category_id = (
-             SELECT id FROM categories
-              WHERE LOWER(name) = LOWER(${table}.category)
-              LIMIT 1
-           )
-         WHERE category_id IS NULL
-      `);
-
-      // Find any remaining unknown category strings and create rows for them.
-      const unknown = await db.execute({
-        sql: `SELECT DISTINCT category FROM ${table} WHERE category_id IS NULL`,
-        args: [],
-      });
-      const unknownNames = unknown.rows
-        .map((r) => (r as unknown as { category: string }).category)
-        .filter((n): n is string => typeof n === 'string' && n.trim().length > 0);
-
-      if (unknownNames.length > 0) {
-        const maxResult = await db.execute('SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories');
-        let nextOrder = Number((maxResult.rows[0] as unknown as { m: number }).m) + 1;
-        for (const name of unknownNames) {
-          const color = FALLBACK_PALETTE[(nextOrder - 1) % FALLBACK_PALETTE.length];
-          await db.execute({
-            sql: 'INSERT OR IGNORE INTO categories (name, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, 0)',
-            args: [name, '📦', color, nextOrder],
-          });
-          nextOrder += 1;
-        }
-
-        // Second pass to back-fill the rows we just created categories for.
-        await db.execute(`
-          UPDATE ${table}
-             SET category_id = (
-               SELECT id FROM categories
-                WHERE LOWER(name) = LOWER(${table}.category)
-                LIMIT 1
-             )
-           WHERE category_id IS NULL
-        `);
-      }
-    } catch {
-      // Column already dropped — back-fill no longer needed for this table.
-    }
-  }
-
-  console.log('[Database] Categories seeded and back-filled');
-
-  // Phase 4: drop the legacy `category` text columns now that:
-  //   - every row has a non-null category_id (back-fill above),
-  //   - every reader JOINs through categories, and
-  //   - every writer sets category_id only.
-  // category_budgets keeps its `category` column because it is part of a
-  // UNIQUE(category, month) constraint that would require a table rebuild
-  // to remove. That's a separate cleanup.
-  try { await db.execute('ALTER TABLE expenses DROP COLUMN category'); console.log('[Database] Dropped legacy expenses.category column'); } catch {}
-  try { await db.execute('ALTER TABLE recurring_expenses DROP COLUMN category'); console.log('[Database] Dropped legacy recurring_expenses.category column'); } catch {}
-  try { await db.execute('ALTER TABLE expense_tags DROP COLUMN category'); console.log('[Database] Dropped legacy expense_tags.category column'); } catch {}
+  console.log(`[Database] Seeded default categories for ${userId}`);
 }
 
 /**
- * Resolve a category name to its id (case-insensitive).
- * If no category matches, creates a new one with a fallback icon/color and
- * returns its id. Used by INSERT/UPDATE handlers to keep `category_id`
- * populated on every write so filters/joins are always accurate.
+ * Resolve a category name to its id for one user (case-insensitive).
+ * If no category matches, creates a new one owned by that user with a
+ * fallback icon/color and returns its id. Used by INSERT/UPDATE handlers to
+ * keep `category_id` populated on every write so filters/joins are accurate.
  */
-export async function resolveCategoryId(name: string): Promise<number | null> {
+export async function resolveCategoryId(userId: string, name: string): Promise<number | null> {
   const trimmed = name.trim();
   if (!trimmed) return null;
   const lookup = await db.execute({
-    sql: 'SELECT id FROM categories WHERE LOWER(name) = LOWER(?) LIMIT 1',
-    args: [trimmed],
+    sql: 'SELECT id FROM categories WHERE user_id = ? AND LOWER(name) = LOWER(?) LIMIT 1',
+    args: [userId, trimmed],
   });
   const existing = lookup.rows[0] as unknown as { id: number } | undefined;
   if (existing) return existing.id;
 
-  const maxResult = await db.execute('SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories');
+  const maxResult = await db.execute({
+    sql: 'SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories WHERE user_id = ?',
+    args: [userId],
+  });
   const nextOrder = Number((maxResult.rows[0] as unknown as { m: number }).m) + 1;
   const color = FALLBACK_PALETTE[(nextOrder - 1) % FALLBACK_PALETTE.length];
   const insert = await db.execute({
-    sql: 'INSERT INTO categories (name, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, 0)',
-    args: [trimmed, '📦', color, nextOrder],
+    sql: 'INSERT INTO categories (name, icon, color, sort_order, is_system, user_id) VALUES (?, ?, ?, ?, 0, ?)',
+    args: [trimmed, '📦', color, nextOrder, userId],
   });
   return Number(insert.lastInsertRowid);
 }
