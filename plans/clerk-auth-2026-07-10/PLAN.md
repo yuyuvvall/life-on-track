@@ -23,7 +23,7 @@ Adding Clerk is therefore a **greenfield add**, not a migration. The stack is Vi
 
 | Where | Name | Notes |
 |---|---|---|
-| client (Vercel + `.env.local`) | `VITE_CLERK_PUBLISHABLE_KEY` | publishable, safe to expose |
+| client (Vercel + `.env.local`) | `CLERK_PUBLISHABLE_KEY` | publishable, safe to expose |
 | server (GCE via Google Secret Manager + local `.env`) | `CLERK_SECRET_KEY` | secret — never in client code or git |
 | server | `CLERK_PUBLISHABLE_KEY` | needed by `@clerk/express` |
 
@@ -45,7 +45,7 @@ Server env in production comes from Google Secret Manager; update the secret and
 ## Client changes
 
 1. `npm i @clerk/react` in `client/`.
-2. `client/src/main.tsx`: wrap the tree with `<ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY} afterSignOutUrl="/">` (outside/around `QueryClientProvider` + `BrowserRouter`).
+2. `client/src/main.tsx`: wrap the tree with `<ClerkProvider publishableKey={import.meta.env.CLERK_PUBLISHABLE_KEY} afterSignOutUrl="/">` (outside/around `QueryClientProvider` + `BrowserRouter`).
 3. **Token attachment** in `client/src/api/client.ts` (fetch wrapper, not a hook context):
    - Add a module-level token getter: `let getToken: (() => Promise<string | null>) | null = null; export function setAuthTokenGetter(fn) { getToken = fn }`.
    - In `request()` (`client.ts:56-70`), if a getter is registered, `const token = await getToken()` and set `Authorization: Bearer ${token}`.
@@ -65,7 +65,7 @@ Server env in production comes from Google Secret Manager; update the secret and
 
 ## Deployment steps
 
-1. Vercel: add `VITE_CLERK_PUBLISHABLE_KEY` env var, redeploy client.
+1. Vercel: add `CLERK_PUBLISHABLE_KEY` env var, redeploy client.
 2. Google Secret Manager: add `CLERK_SECRET_KEY` + `CLERK_PUBLISHABLE_KEY` to the server env secret.
 3. `.\deploy\update-server.ps1 -RefreshEnv` from repo root.
 
