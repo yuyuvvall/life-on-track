@@ -6,6 +6,7 @@ import { GoalDetailView } from '@/views/goal-detail-view';
 import { ExpenseQuickAdd } from '@/views/expense-quick-add';
 import { ExpensesView } from '@/views/expenses-view';
 import { TabBar } from '@/components/tab-bar';
+import { AuthGate } from '@/components/auth-gate';
 import { QuickAddModal } from '@/components/quick-add-modal';
 import { IntegrityModal } from '@/components/integrity-modal';
 import { ToastHost } from '@/components/toast';
@@ -52,7 +53,11 @@ function AppContent() {
 }
 
 function App() {
-  return <AppContent />;
+  return (
+    <AuthGate>
+      <AppContent />
+    </AuthGate>
+  );
 }
 
 export default App;

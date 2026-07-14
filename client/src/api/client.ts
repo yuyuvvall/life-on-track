@@ -45,6 +45,15 @@ import type {
 // Use environment variable for production, proxy for development
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+// Clerk session token getter, registered from inside the React tree
+// (this module is not a React context, so the hook result is bridged in).
+type AuthTokenGetter = () => Promise<string | null>;
+let authTokenGetter: AuthTokenGetter | null = null;
+
+export function setAuthTokenGetter(getter: AuthTokenGetter | null) {
+  authTokenGetter = getter;
+}
+
 // Request options with optional purpose for logging
 interface RequestOptions extends RequestInit {
   purpose?: string;
@@ -73,6 +82,14 @@ async function request<T>(
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
+      // Fetch a fresh token per attempt — Clerk refreshes short-lived tokens
+      if (authTokenGetter) {
+        const token = await authTokenGetter().catch(() => null);
+        if (token) {
+          (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+        }
+      }
+
       const response = await fetch(`${API_BASE}${endpoint}`, {
         ...fetchOptions,
         headers,

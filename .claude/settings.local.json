@@ -13,7 +13,6 @@
       "Bash(npm run test --workspace=server)",
       "Bash(npm run test:watch --workspace=client)",
       "Bash(npm run test:watch --workspace=server)",
-      "*",
       "Bash(npx vitest *)",
       "Bash(npx *)"
     ]
