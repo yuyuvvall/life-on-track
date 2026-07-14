@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { trackedExecute } from '../db/index.js';
+import { getUserId } from '../middleware/auth.js';
 import type { TaskRow, SubTaskRow } from '../types.js';
 import { taskRowToTask, subTaskRowToSubTask } from '../types.js';
 
@@ -28,14 +29,16 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Task'
  */
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const tasksResult = await trackedExecute(`
-      SELECT * FROM tasks WHERE parent_id IS NULL ORDER BY 
+    const userId = getUserId(req);
+    const tasksResult = await trackedExecute({
+      sql: `SELECT * FROM tasks WHERE parent_id IS NULL AND user_id = ? ORDER BY
         CASE WHEN deadline IS NOT NULL THEN 0 ELSE 1 END,
         deadline ASC,
-        created_at DESC
-    `, 'getAllTasks');
+        created_at DESC`,
+      args: [userId]
+    }, 'getAllTasks');
     const tasks = tasksResult.rows as unknown as TaskRow[];
 
     const result = await Promise.all(tasks.map(async (task) => {
@@ -78,9 +81,10 @@ router.get('/', async (_req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const taskResult = await trackedExecute({
-      sql: 'SELECT * FROM tasks WHERE id = ?',
-      args: [req.params.id]
+      sql: 'SELECT * FROM tasks WHERE id = ? AND user_id = ?',
+      args: [req.params.id, userId]
     }, 'getTaskById');
     
     if (taskResult.rows.length === 0) {
@@ -125,18 +129,29 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { title, category = 'Personal', deadline, parentId } = req.body;
-    
+
     if (!title) {
       return res.status(400).json({ message: 'Title is required' });
     }
 
+    if (parentId) {
+      const parentResult = await trackedExecute({
+        sql: 'SELECT id FROM tasks WHERE id = ? AND user_id = ?',
+        args: [parentId, userId]
+      }, 'checkParentTaskOwnership');
+      if (parentResult.rows.length === 0) {
+        return res.status(404).json({ message: 'Parent task not found' });
+      }
+    }
+
     const id = uuidv4();
-    
+
     await trackedExecute({
-      sql: `INSERT INTO tasks (id, parent_id, title, category, deadline)
-            VALUES (?, ?, ?, ?, ?)`,
-      args: [id, parentId || null, title, category, deadline || null]
+      sql: `INSERT INTO tasks (id, parent_id, title, category, deadline, user_id)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [id, parentId || null, title, category, deadline || null, userId]
     }, 'createTask');
 
     const taskResult = await trackedExecute({
@@ -177,12 +192,13 @@ router.post('/', async (req, res) => {
  */
 router.patch('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { title, category, deadline, scheduledCompleteDate, isCompleted } = req.body;
     const { id } = req.params;
 
     const existingResult = await trackedExecute({
-      sql: 'SELECT * FROM tasks WHERE id = ?',
-      args: [id]
+      sql: 'SELECT * FROM tasks WHERE id = ? AND user_id = ?',
+      args: [id, userId]
     }, 'checkTaskExistsForUpdate');
     if (existingResult.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
@@ -228,9 +244,9 @@ router.patch('/:id', async (req, res) => {
     }
 
     if (updates.length > 0) {
-      values.push(id);
+      values.push(id, userId);
       await trackedExecute({
-        sql: `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`,
+        sql: `UPDATE tasks SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
         args: values
       }, 'updateTask');
     }
@@ -274,9 +290,10 @@ router.patch('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const result = await trackedExecute({
-      sql: 'DELETE FROM tasks WHERE id = ?',
-      args: [req.params.id]
+      sql: 'DELETE FROM tasks WHERE id = ? AND user_id = ?',
+      args: [req.params.id, userId]
     }, 'deleteTask');
     
     if (result.rowsAffected === 0) {
@@ -292,12 +309,13 @@ router.delete('/:id', async (req, res) => {
 // Add subtask
 router.post('/:taskId/subtasks', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { taskId } = req.params;
     const { text } = req.body;
 
     const taskResult = await trackedExecute({
-      sql: 'SELECT * FROM tasks WHERE id = ?',
-      args: [taskId]
+      sql: 'SELECT * FROM tasks WHERE id = ? AND user_id = ?',
+      args: [taskId, userId]
     }, 'getTaskForSubtask');
     if (taskResult.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
@@ -344,12 +362,15 @@ router.post('/:taskId/subtasks', async (req, res) => {
 // Update subtask
 router.patch('/:taskId/subtasks/:subTaskId', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { taskId, subTaskId } = req.params;
     const { completed, text } = req.body;
 
     const subtaskResult = await trackedExecute({
-      sql: 'SELECT * FROM subtasks WHERE id = ? AND task_id = ?',
-      args: [subTaskId, taskId]
+      sql: `SELECT s.* FROM subtasks s
+              JOIN tasks t ON t.id = s.task_id
+             WHERE s.id = ? AND s.task_id = ? AND t.user_id = ?`,
+      args: [subTaskId, taskId, userId]
     }, 'checkSubtaskExists');
     
     if (subtaskResult.rows.length === 0) {
@@ -392,11 +413,13 @@ router.patch('/:taskId/subtasks/:subTaskId', async (req, res) => {
 // Delete subtask
 router.delete('/:taskId/subtasks/:subTaskId', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { taskId, subTaskId } = req.params;
 
     const result = await trackedExecute({
-      sql: 'DELETE FROM subtasks WHERE id = ? AND task_id = ?',
-      args: [subTaskId, taskId]
+      sql: `DELETE FROM subtasks WHERE id = ? AND task_id = ?
+              AND EXISTS (SELECT 1 FROM tasks t WHERE t.id = subtasks.task_id AND t.user_id = ?)`,
+      args: [subTaskId, taskId, userId]
     }, 'deleteSubtask');
 
     if (result.rowsAffected === 0) {

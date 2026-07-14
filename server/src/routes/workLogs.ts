@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getToday, trackedExecute } from '../db/index.js';
+import { getUserId } from '../middleware/auth.js';
 import type { WorkLogRow } from '../types.js';
 import { workLogRowToWorkLog } from '../types.js';
 
@@ -21,9 +22,13 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/WorkLog'
  */
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const result = await trackedExecute('SELECT * FROM work_logs ORDER BY log_date DESC', 'getAllWorkLogs');
+    const userId = getUserId(req);
+    const result = await trackedExecute({
+      sql: 'SELECT * FROM work_logs WHERE user_id = ? ORDER BY log_date DESC',
+      args: [userId]
+    }, 'getAllWorkLogs');
     const logs = result.rows as unknown as WorkLogRow[];
     res.json(logs.map(workLogRowToWorkLog));
   } catch (err) {
@@ -47,12 +52,13 @@ router.get('/', async (_req, res) => {
  *                 - $ref: '#/components/schemas/WorkLog'
  *                 - type: 'null'
  */
-router.get('/today', async (_req, res) => {
+router.get('/today', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const today = getToday();
     const result = await trackedExecute({
-      sql: 'SELECT * FROM work_logs WHERE log_date = ?',
-      args: [today]
+      sql: 'SELECT * FROM work_logs WHERE log_date = ? AND user_id = ?',
+      args: [today, userId]
     }, 'getTodayWorkLog');
     
     const log = result.rows[0] as unknown as WorkLogRow | undefined;
@@ -65,9 +71,10 @@ router.get('/today', async (_req, res) => {
 // Get work log by date
 router.get('/date/:date', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const result = await trackedExecute({
-      sql: 'SELECT * FROM work_logs WHERE log_date = ?',
-      args: [req.params.date]
+      sql: 'SELECT * FROM work_logs WHERE log_date = ? AND user_id = ?',
+      args: [req.params.date, userId]
     }, 'getWorkLogByDate');
     
     const log = result.rows[0] as unknown as WorkLogRow | undefined;
@@ -103,6 +110,7 @@ router.get('/date/:date', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { logDate, integrityScore, missedOpportunityNote, successNote } = req.body;
     const date = logDate || getToday();
 
@@ -120,29 +128,29 @@ router.post('/', async (req, res) => {
 
     // Check if log exists for this date
     const existingResult = await trackedExecute({
-      sql: 'SELECT * FROM work_logs WHERE log_date = ?',
-      args: [date]
+      sql: 'SELECT * FROM work_logs WHERE log_date = ? AND user_id = ?',
+      args: [date, userId]
     }, 'checkWorkLogExists');
     const existing = existingResult.rows[0] as unknown as WorkLogRow | undefined;
 
     if (existing) {
       await trackedExecute({
-        sql: `UPDATE work_logs 
+        sql: `UPDATE work_logs
               SET integrity_score = ?, missed_opportunity_note = ?, success_note = ?
-              WHERE log_date = ?`,
-        args: [integrityScore, missedOpportunityNote || null, successNote || null, date]
+              WHERE log_date = ? AND user_id = ?`,
+        args: [integrityScore, missedOpportunityNote || null, successNote || null, date, userId]
       }, 'updateWorkLog');
     } else {
       await trackedExecute({
-        sql: `INSERT INTO work_logs (log_date, integrity_score, missed_opportunity_note, success_note)
-              VALUES (?, ?, ?, ?)`,
-        args: [date, integrityScore, missedOpportunityNote || null, successNote || null]
+        sql: `INSERT INTO work_logs (log_date, integrity_score, missed_opportunity_note, success_note, user_id)
+              VALUES (?, ?, ?, ?, ?)`,
+        args: [date, integrityScore, missedOpportunityNote || null, successNote || null, userId]
       }, 'createWorkLog');
     }
 
     const logResult = await trackedExecute({
-      sql: 'SELECT * FROM work_logs WHERE log_date = ?',
-      args: [date]
+      sql: 'SELECT * FROM work_logs WHERE log_date = ? AND user_id = ?',
+      args: [date, userId]
     }, 'getCreatedWorkLog');
     const log = logResult.rows[0] as unknown as WorkLogRow;
     res.status(existing ? 200 : 201).json(workLogRowToWorkLog(log));
@@ -154,12 +162,13 @@ router.post('/', async (req, res) => {
 // Update work log
 router.patch('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { id } = req.params;
     const { integrityScore, missedOpportunityNote, successNote } = req.body;
 
     const existingResult = await trackedExecute({
-      sql: 'SELECT * FROM work_logs WHERE id = ?',
-      args: [id]
+      sql: 'SELECT * FROM work_logs WHERE id = ? AND user_id = ?',
+      args: [id, userId]
     }, 'checkWorkLogExistsForUpdate');
     if (existingResult.rows.length === 0) {
       return res.status(404).json({ message: 'Work log not found' });
@@ -193,9 +202,9 @@ router.patch('/:id', async (req, res) => {
     }
 
     if (updates.length > 0) {
-      values.push(parseInt(id));
+      values.push(parseInt(id), userId);
       await trackedExecute({
-        sql: `UPDATE work_logs SET ${updates.join(', ')} WHERE id = ?`,
+        sql: `UPDATE work_logs SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
         args: values
       }, 'patchWorkLog');
     }

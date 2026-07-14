@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db, { trackedExecute, resolveCategoryId } from '../db/index.js';
+import { getUserId } from '../middleware/auth.js';
 import type { CategoryBudgetRow } from '../types.js';
 import { budgetRowToBudget } from '../types.js';
 
@@ -29,6 +30,7 @@ const MONTH_PATTERN = /^\d{4}-\d{2}$/;
  */
 router.get('/', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { month } = req.query;
 
     if (!month || typeof month !== 'string' || !MONTH_PATTERN.test(month)) {
@@ -39,12 +41,12 @@ router.get('/', async (req, res) => {
     const result = await trackedExecute({
       sql: `SELECT b.*
             FROM category_budgets b
-            WHERE b.month = (
+            WHERE b.user_id = ? AND b.month = (
               SELECT MAX(month) FROM category_budgets
-              WHERE category = b.category AND month <= ?
+              WHERE user_id = ? AND category = b.category AND month <= ?
             )
             ORDER BY b.category`,
-      args: [month]
+      args: [userId, userId, month]
     }, 'getBudgetsEffectiveForMonth');
 
     const rows = result.rows as unknown as CategoryBudgetRow[];
@@ -83,6 +85,7 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { category, month, amount } = req.body;
 
     if (!category || typeof category !== 'string') {
@@ -95,17 +98,17 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'amount must be a non-negative number' });
     }
 
-    const categoryId = await resolveCategoryId(category);
+    const categoryId = await resolveCategoryId(userId, category);
 
     await trackedExecute({
-      sql: `INSERT INTO category_budgets (category, category_id, month, amount) VALUES (?, ?, ?, ?)
-            ON CONFLICT(category, month) DO UPDATE SET amount = excluded.amount, category_id = excluded.category_id`,
-      args: [category, categoryId, month, amount]
+      sql: `INSERT INTO category_budgets (category, category_id, month, amount, user_id) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, category, month) DO UPDATE SET amount = excluded.amount, category_id = excluded.category_id`,
+      args: [category, categoryId, month, amount, userId]
     }, 'upsertBudget');
 
     const result = await trackedExecute({
-      sql: 'SELECT * FROM category_budgets WHERE category = ? AND month = ?',
-      args: [category, month]
+      sql: 'SELECT * FROM category_budgets WHERE category = ? AND month = ? AND user_id = ?',
+      args: [category, month, userId]
     }, 'getUpsertedBudget');
 
     const row = result.rows[0] as unknown as CategoryBudgetRow;
@@ -145,6 +148,7 @@ router.post('/', async (req, res) => {
  */
 router.post('/change-from-now', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { category, month, amount } = req.body;
 
     if (!category || typeof category !== 'string') {
@@ -157,24 +161,24 @@ router.post('/change-from-now', async (req, res) => {
       return res.status(400).json({ message: 'amount must be a non-negative number' });
     }
 
-    const categoryId = await resolveCategoryId(category);
+    const categoryId = await resolveCategoryId(userId, category);
 
     // Atomic: upsert for this month + delete any later rows for this category.
     await db.batch([
       {
-        sql: `INSERT INTO category_budgets (category, category_id, month, amount) VALUES (?, ?, ?, ?)
-              ON CONFLICT(category, month) DO UPDATE SET amount = excluded.amount, category_id = excluded.category_id`,
-        args: [category, categoryId, month, amount],
+        sql: `INSERT INTO category_budgets (category, category_id, month, amount, user_id) VALUES (?, ?, ?, ?, ?)
+              ON CONFLICT(user_id, category, month) DO UPDATE SET amount = excluded.amount, category_id = excluded.category_id`,
+        args: [category, categoryId, month, amount, userId],
       },
       {
-        sql: 'DELETE FROM category_budgets WHERE category = ? AND month > ?',
-        args: [category, month],
+        sql: 'DELETE FROM category_budgets WHERE category = ? AND month > ? AND user_id = ?',
+        args: [category, month, userId],
       },
     ], 'write');
 
     const result = await trackedExecute({
-      sql: 'SELECT * FROM category_budgets WHERE category = ? AND month = ?',
-      args: [category, month]
+      sql: 'SELECT * FROM category_budgets WHERE category = ? AND month = ? AND user_id = ?',
+      args: [category, month, userId]
     }, 'getUpsertedBudget');
 
     const row = result.rows[0] as unknown as CategoryBudgetRow;
@@ -211,6 +215,7 @@ router.post('/change-from-now', async (req, res) => {
  */
 router.post('/remove-entirely', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { category, month } = req.body;
 
     if (!category || typeof category !== 'string') {
@@ -221,8 +226,8 @@ router.post('/remove-entirely', async (req, res) => {
     }
 
     await trackedExecute({
-      sql: 'DELETE FROM category_budgets WHERE category = ? AND month >= ?',
-      args: [category, month]
+      sql: 'DELETE FROM category_budgets WHERE category = ? AND month >= ? AND user_id = ?',
+      args: [category, month, userId]
     }, 'removeBudgetFromNowOn');
 
     res.status(204).send();
@@ -251,9 +256,10 @@ router.post('/remove-entirely', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const result = await trackedExecute({
-      sql: 'DELETE FROM category_budgets WHERE id = ?',
-      args: [req.params.id]
+      sql: 'DELETE FROM category_budgets WHERE id = ? AND user_id = ?',
+      args: [req.params.id, userId]
     }, 'deleteBudget');
 
     if (result.rowsAffected === 0) {

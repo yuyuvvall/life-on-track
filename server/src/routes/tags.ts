@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { trackedExecute, resolveCategoryId } from '../db/index.js';
+import { getUserId } from '../middleware/auth.js';
 import { TagRow, tagRowToTag } from '../types.js';
 
 const router = Router();
@@ -25,6 +26,7 @@ const router = Router();
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const includeArchived = req.query.includeArchived === '1';
     const baseSelect = `SELECT expense_tags.id, expense_tags.name, expense_tags.category_id,
                                expense_tags.amount, expense_tags.note, expense_tags.icon, expense_tags.color,
@@ -32,9 +34,9 @@ router.get('/', async (req: Request, res: Response) => {
                                c.name AS category
                         FROM expense_tags LEFT JOIN categories c ON c.id = expense_tags.category_id`;
     const sql = includeArchived
-      ? `${baseSelect} ORDER BY expense_tags.last_used_at DESC, expense_tags.created_at DESC`
-      : `${baseSelect} WHERE expense_tags.is_archived = 0 ORDER BY expense_tags.last_used_at DESC, expense_tags.created_at DESC`;
-    const result = await trackedExecute(sql, 'listTags');
+      ? `${baseSelect} WHERE expense_tags.user_id = ? ORDER BY expense_tags.last_used_at DESC, expense_tags.created_at DESC`
+      : `${baseSelect} WHERE expense_tags.user_id = ? AND expense_tags.is_archived = 0 ORDER BY expense_tags.last_used_at DESC, expense_tags.created_at DESC`;
+    const result = await trackedExecute({ sql, args: [userId] }, 'listTags');
     const tags = (result.rows as unknown as TagRow[]).map(tagRowToTag);
     res.json(tags);
   } catch (err) {
@@ -58,14 +60,15 @@ const TAG_SELECT_WITH_CATEGORY = `SELECT expense_tags.id, expense_tags.name, exp
        expense_tags.is_archived, expense_tags.last_used_at, expense_tags.created_at,
        c.name AS category
 FROM expense_tags LEFT JOIN categories c ON c.id = expense_tags.category_id
-WHERE expense_tags.id = ?`;
+WHERE expense_tags.id = ? AND expense_tags.user_id = ?`;
 
 router.get('/:id', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ message: 'Invalid id' });
     const result = await trackedExecute(
-      { sql: TAG_SELECT_WITH_CATEGORY, args: [id] },
+      { sql: TAG_SELECT_WITH_CATEGORY, args: [id, userId] },
       'getTagById',
     );
     const row = (result.rows as unknown as TagRow[])[0];
@@ -93,6 +96,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const { name, category, amount, note, icon, color } = req.body ?? {};
     if (typeof name !== 'string' || name.trim().length === 0) {
       return res.status(400).json({ message: 'name is required' });
@@ -109,18 +113,18 @@ router.post('/', async (req: Request, res: Response) => {
     if (typeof color !== 'string' || color.length === 0) {
       return res.status(400).json({ message: 'color is required' });
     }
-    const categoryId = await resolveCategoryId(category);
+    const categoryId = await resolveCategoryId(userId, category);
 
     const result = await trackedExecute(
       {
-        sql: `INSERT INTO expense_tags (name, category_id, amount, note, icon, color)
-              VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [name.trim(), categoryId, amount, note ?? null, icon.trim(), color],
+        sql: `INSERT INTO expense_tags (name, category_id, amount, note, icon, color, user_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        args: [name.trim(), categoryId, amount, note ?? null, icon.trim(), color, userId],
       },
       'createTag',
     );
     const lookup = await trackedExecute(
-      { sql: TAG_SELECT_WITH_CATEGORY, args: [Number(result.lastInsertRowid)] },
+      { sql: TAG_SELECT_WITH_CATEGORY, args: [Number(result.lastInsertRowid), userId] },
       'getTagAfterCreate',
     );
     res.status(201).json(tagRowToTag((lookup.rows as unknown as TagRow[])[0]));
@@ -146,6 +150,7 @@ router.post('/', async (req: Request, res: Response) => {
  */
 router.put('/:id', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ message: 'Invalid id' });
 
@@ -163,7 +168,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       if (typeof category !== 'string' || category.length === 0) {
         return res.status(400).json({ message: 'category must be non-empty string' });
       }
-      const newCategoryId = await resolveCategoryId(category);
+      const newCategoryId = await resolveCategoryId(userId, category);
       sets.push('category_id = ?'); args.push(newCategoryId);
     }
     if (amount !== undefined) {
@@ -193,16 +198,16 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     if (sets.length === 0) return res.status(400).json({ message: 'No fields to update' });
 
-    args.push(id);
+    args.push(id, userId);
     const updateResult = await trackedExecute(
-      { sql: `UPDATE expense_tags SET ${sets.join(', ')} WHERE id = ?`, args },
+      { sql: `UPDATE expense_tags SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, args },
       'updateTag',
     );
     if (updateResult.rowsAffected === 0) {
       return res.status(404).json({ message: 'Tag not found' });
     }
     const lookup = await trackedExecute(
-      { sql: TAG_SELECT_WITH_CATEGORY, args: [id] },
+      { sql: TAG_SELECT_WITH_CATEGORY, args: [id, userId] },
       'getTagAfterUpdate',
     );
     res.json(tagRowToTag((lookup.rows as unknown as TagRow[])[0]));
@@ -224,10 +229,11 @@ router.put('/:id', async (req: Request, res: Response) => {
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
+    const userId = getUserId(req);
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ message: 'Invalid id' });
     const result = await trackedExecute(
-      { sql: 'UPDATE expense_tags SET is_archived = 1 WHERE id = ?', args: [id] },
+      { sql: 'UPDATE expense_tags SET is_archived = 1 WHERE id = ? AND user_id = ?', args: [id, userId] },
       'archiveTag',
     );
     if (result.rowsAffected === 0) {

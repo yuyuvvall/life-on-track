@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { InValue } from '@libsql/client';
 import { trackedExecute, resolveCategoryId } from '../db/index.js';
+import { getUserId } from '../middleware/auth.js';
 import type { RecurringExpenseRow, ExpenseRow } from '../types.js';
 import { recurringExpenseRowToRecurringExpense, expenseRowToExpense } from '../types.js';
 
@@ -16,17 +17,19 @@ const router = Router();
  *       200:
  *         description: List of recurring expenses
  */
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const result = await trackedExecute(
-      `SELECT recurring_expenses.id, recurring_expenses.amount, recurring_expenses.category_id,
+    const userId = getUserId(req);
+    const result = await trackedExecute({
+      sql: `SELECT recurring_expenses.id, recurring_expenses.amount, recurring_expenses.category_id,
               recurring_expenses.note, recurring_expenses.recurrence_type, recurring_expenses.recurrence_day,
               recurring_expenses.is_active, recurring_expenses.last_generated_date,
               recurring_expenses.created_at, recurring_expenses.tag_id, c.name AS category
        FROM recurring_expenses LEFT JOIN categories c ON c.id = recurring_expenses.category_id
+       WHERE recurring_expenses.user_id = ?
        ORDER BY recurring_expenses.created_at DESC`,
-      'getAllRecurringExpenses'
-    );
+      args: [userId]
+    }, 'getAllRecurringExpenses');
 
     const recurringExpenses = result.rows as unknown as RecurringExpenseRow[];
     res.json(recurringExpenses.map(recurringExpenseRowToRecurringExpense));
@@ -75,6 +78,7 @@ router.get('/', async (_req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { amount, category, note, recurrenceType, recurrenceDay, tagId } = req.body;
 
     if (amount === undefined || amount === null) {
@@ -108,7 +112,7 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ message: 'tagId must be an integer' });
       }
       const tagLookup = await trackedExecute(
-        { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ?', args: [tagId] },
+        { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ? AND user_id = ?', args: [tagId, userId] },
         'validateTagOnRecurringCreate',
       );
       const tagRow = tagLookup.rows[0] as unknown as { id: number; is_archived: number } | undefined;
@@ -118,12 +122,12 @@ router.post('/', async (req, res) => {
       resolvedTagId = tagId;
     }
 
-    const categoryId = await resolveCategoryId(category);
+    const categoryId = await resolveCategoryId(userId, category);
 
     const result = await trackedExecute({
-      sql: `INSERT INTO recurring_expenses (amount, category_id, note, recurrence_type, recurrence_day, tag_id)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [amount, categoryId, note || null, recurrenceType, recurrenceDay, resolvedTagId]
+      sql: `INSERT INTO recurring_expenses (amount, category_id, note, recurrence_type, recurrence_day, tag_id, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [amount, categoryId, note || null, recurrenceType, recurrenceDay, resolvedTagId, userId]
     }, 'createRecurringExpense');
 
     const recurringResult = await trackedExecute({
@@ -184,6 +188,7 @@ router.post('/', async (req, res) => {
  */
 router.put('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { id } = req.params;
     const { amount, category, note, recurrenceType, recurrenceDay, isActive, tagId } = req.body;
 
@@ -196,7 +201,7 @@ router.put('/:id', async (req, res) => {
       args.push(amount);
     }
     if (category !== undefined) {
-      const newCategoryId = await resolveCategoryId(category);
+      const newCategoryId = await resolveCategoryId(userId, category);
       updates.push('category_id = ?');
       args.push(newCategoryId);
     }
@@ -222,7 +227,7 @@ router.put('/:id', async (req, res) => {
           return res.status(400).json({ message: 'tagId must be an integer or null' });
         }
         const tagLookup = await trackedExecute(
-          { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ?', args: [tagId] },
+          { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ? AND user_id = ?', args: [tagId, userId] },
           'validateTagOnRecurringUpdate',
         );
         const tagRow = tagLookup.rows[0] as unknown as { id: number; is_archived: number } | undefined;
@@ -238,10 +243,10 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ message: 'No fields to update' });
     }
 
-    args.push(id);
+    args.push(id, userId);
 
     const result = await trackedExecute({
-      sql: `UPDATE recurring_expenses SET ${updates.join(', ')} WHERE id = ?`,
+      sql: `UPDATE recurring_expenses SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
       args
     }, 'updateRecurringExpense');
 
@@ -286,9 +291,10 @@ router.put('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const result = await trackedExecute({
-      sql: 'DELETE FROM recurring_expenses WHERE id = ?',
-      args: [req.params.id]
+      sql: 'DELETE FROM recurring_expenses WHERE id = ? AND user_id = ?',
+      args: [req.params.id, userId]
     }, 'deleteRecurringExpense');
 
     if (result.rowsAffected === 0) {
@@ -321,23 +327,24 @@ router.delete('/:id', async (req, res) => {
  *                   items:
  *                     $ref: '#/components/schemas/Expense'
  */
-router.post('/generate', async (_req, res) => {
+router.post('/generate', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
     const dayOfWeek = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
     const dayOfMonth = today.getDate();
 
     // Get all active recurring expenses
-    const result = await trackedExecute(
-      `SELECT recurring_expenses.id, recurring_expenses.amount, recurring_expenses.category_id,
+    const result = await trackedExecute({
+      sql: `SELECT recurring_expenses.id, recurring_expenses.amount, recurring_expenses.category_id,
               recurring_expenses.note, recurring_expenses.recurrence_type, recurring_expenses.recurrence_day,
               recurring_expenses.is_active, recurring_expenses.last_generated_date,
               recurring_expenses.created_at, recurring_expenses.tag_id, c.name AS category
        FROM recurring_expenses LEFT JOIN categories c ON c.id = recurring_expenses.category_id
-       WHERE recurring_expenses.is_active = 1`,
-      'getActiveRecurringExpenses'
-    );
+       WHERE recurring_expenses.is_active = 1 AND recurring_expenses.user_id = ?`,
+      args: [userId]
+    }, 'getActiveRecurringExpenses');
 
     const recurringExpenses = result.rows as unknown as RecurringExpenseRow[];
     const generatedExpenses: ExpenseRow[] = [];
@@ -359,21 +366,21 @@ router.post('/generate', async (_req, res) => {
       if (shouldGenerate && recurring.last_generated_date !== todayStr) {
         // Create the actual expense (carry category_id forward)
         const expenseResult = await trackedExecute({
-          sql: 'INSERT INTO expenses (amount, category_id, note, created_at, tag_id) VALUES (?, ?, ?, ?, ?)',
-          args: [recurring.amount, recurring.category_id, recurring.note, today.toISOString(), recurring.tag_id]
+          sql: 'INSERT INTO expenses (amount, category_id, note, created_at, tag_id, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+          args: [recurring.amount, recurring.category_id, recurring.note, today.toISOString(), recurring.tag_id, userId]
         }, 'createExpenseFromRecurring');
 
         if (recurring.tag_id !== null) {
           trackedExecute(
-            { sql: 'UPDATE expense_tags SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?', args: [recurring.tag_id] },
+            { sql: 'UPDATE expense_tags SET last_used_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?', args: [recurring.tag_id, userId] },
             'updateTagLastUsedAt',
           ).catch(() => {});
         }
 
         // Update last_generated_date
         await trackedExecute({
-          sql: 'UPDATE recurring_expenses SET last_generated_date = ? WHERE id = ?',
-          args: [todayStr, recurring.id]
+          sql: 'UPDATE recurring_expenses SET last_generated_date = ? WHERE id = ? AND user_id = ?',
+          args: [todayStr, recurring.id, userId]
         }, 'updateRecurringExpenseLastGenerated');
 
         // Fetch the created expense

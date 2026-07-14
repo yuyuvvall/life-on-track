@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { InValue } from '@libsql/client';
 import db, { trackedExecute, resolveCategoryId } from '../db/index.js';
+import { getUserId } from '../middleware/auth.js';
 import type { ExpenseRow, ExpenseRepaymentRow, PrepaidCardRow } from '../types.js';
 import { expenseRowToExpense, repaymentRowToRepayment } from '../types.js';
 import {
@@ -26,20 +27,20 @@ export const EXPENSE_COLUMNS =
   'expenses.created_at, expenses.tag_id, expenses.card_id, expenses.face_amount, c.name AS category, ' +
   'COALESCE((SELECT SUM(r.amount) FROM expense_repayments r WHERE r.expense_id = expenses.id), 0) AS repaid_total';
 
-async function loadExpenseById(id: number | string): Promise<ExpenseRow | undefined> {
+async function loadExpenseById(userId: string, id: number | string): Promise<ExpenseRow | undefined> {
   const result = await trackedExecute({
     sql: `SELECT ${EXPENSE_COLUMNS}
           FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id
-          WHERE expenses.id = ?`,
-    args: [id],
+          WHERE expenses.id = ? AND expenses.user_id = ?`,
+    args: [id, userId],
   }, 'getExpenseById');
   return result.rows[0] as unknown as ExpenseRow | undefined;
 }
 
-/** Validate that a card exists and is active. Returns the row or null. */
-async function loadActiveCard(cardId: number): Promise<PrepaidCardRow | null> {
+/** Validate that a card exists, belongs to the user, and is active. Returns the row or null. */
+async function loadActiveCard(userId: string, cardId: number): Promise<PrepaidCardRow | null> {
   const result = await trackedExecute(
-    { sql: 'SELECT * FROM prepaid_cards WHERE id = ?', args: [cardId] },
+    { sql: 'SELECT * FROM prepaid_cards WHERE id = ? AND user_id = ?', args: [cardId, userId] },
     'validateCardOnExpense',
   );
   const row = result.rows[0] as unknown as PrepaidCardRow | undefined;
@@ -78,6 +79,7 @@ async function loadActiveCard(cardId: number): Promise<PrepaidCardRow | null> {
  */
 router.get('/', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { start, end, categoryId } = req.query;
 
     let parsedCategoryId: number | null = null;
@@ -89,8 +91,8 @@ router.get('/', async (req, res) => {
       parsedCategoryId = n;
     }
 
-    const where: string[] = [];
-    const args: InValue[] = [];
+    const where: string[] = ['expenses.user_id = ?'];
+    const args: InValue[] = [userId];
     if (start && end) {
       where.push('DATE(created_at) BETWEEN ? AND ?');
       args.push(start as string, end as string);
@@ -103,11 +105,11 @@ router.get('/', async (req, res) => {
     const sql =
       `SELECT ${EXPENSE_COLUMNS} ` +
       'FROM expenses LEFT JOIN categories c ON c.id = expenses.category_id' +
-      (where.length ? ` WHERE ${where.map((w) => w.replace(/category_id/g, 'expenses.category_id').replace(/created_at/g, 'expenses.created_at')).join(' AND ')}` : '') +
+      ` WHERE ${where.map((w) => w.replace(/category_id/g, 'expenses.category_id').replace(/created_at/g, 'expenses.created_at')).join(' AND ')}` +
       ' ORDER BY expenses.created_at DESC';
 
     const result = await trackedExecute(
-      args.length ? { sql, args } : sql,
+      { sql, args },
       parsedCategoryId !== null ? 'getExpensesFiltered' : (start && end ? 'getExpensesByDateRange' : 'getAllExpenses'),
     );
 
@@ -142,7 +144,8 @@ router.get('/', async (req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
-    const expense = await loadExpenseById(req.params.id);
+    const userId = getUserId(req);
+    const expense = await loadExpenseById(userId, req.params.id);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
@@ -180,7 +183,8 @@ const EPS = 1e-9;
  */
 router.get('/:id/repayments', async (req, res) => {
   try {
-    const expense = await loadExpenseById(req.params.id);
+    const userId = getUserId(req);
+    const expense = await loadExpenseById(userId, req.params.id);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
@@ -232,13 +236,14 @@ router.get('/:id/repayments', async (req, res) => {
  */
 router.post('/:id/repayments', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { amount, note, repaidAt } = req.body;
 
     if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ message: 'Repayment amount must be a positive number' });
     }
 
-    const expense = await loadExpenseById(req.params.id);
+    const expense = await loadExpenseById(userId, req.params.id);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
@@ -262,7 +267,7 @@ router.post('/:id/repayments', async (req, res) => {
       args: [repaymentId],
     }, 'getExpenseRepayment');
     const row = rowResult.rows[0] as unknown as ExpenseRepaymentRow;
-    const refreshed = await loadExpenseById(req.params.id);
+    const refreshed = await loadExpenseById(userId, req.params.id);
 
     res.status(201).json({
       repayment: repaymentRowToRepayment(row),
@@ -298,9 +303,11 @@ router.post('/:id/repayments', async (req, res) => {
  */
 router.delete('/:id/repayments/:repaymentId', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const result = await trackedExecute({
-      sql: 'DELETE FROM expense_repayments WHERE id = ? AND expense_id = ?',
-      args: [req.params.repaymentId, req.params.id],
+      sql: `DELETE FROM expense_repayments WHERE id = ? AND expense_id = ?
+              AND EXISTS (SELECT 1 FROM expenses e WHERE e.id = expense_repayments.expense_id AND e.user_id = ?)`,
+      args: [req.params.repaymentId, req.params.id, userId],
     }, 'deleteExpenseRepayment');
     if (result.rowsAffected === 0) {
       return res.status(404).json({ message: 'Repayment not found' });
@@ -335,6 +342,7 @@ router.delete('/:id/repayments/:repaymentId', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { amount, category, note, createdAt, tagId, cardId } = req.body;
 
     if (amount === undefined || amount === null) {
@@ -351,7 +359,7 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ message: 'tagId must be an integer' });
       }
       const tagLookup = await trackedExecute(
-        { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ?', args: [tagId] },
+        { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ? AND user_id = ?', args: [tagId, userId] },
         'validateTagOnExpenseCreate',
       );
       const tagRow = tagLookup.rows[0] as unknown as { id: number; is_archived: number } | undefined;
@@ -375,7 +383,7 @@ router.post('/', async (req, res) => {
       if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
         return res.status(400).json({ message: 'A card purchase amount must be a positive number' });
       }
-      const card = await loadActiveCard(cardId);
+      const card = await loadActiveCard(userId, cardId);
       if (!card) {
         return res.status(400).json({ message: 'Invalid or archived cardId' });
       }
@@ -393,11 +401,11 @@ router.post('/', async (req, res) => {
     // Use provided date or default to now
     const timestamp = createdAt || new Date().toISOString();
 
-    const categoryId = await resolveCategoryId(category);
+    const categoryId = await resolveCategoryId(userId, category);
 
     const result = await trackedExecute({
-      sql: 'INSERT INTO expenses (amount, category_id, note, created_at, tag_id, card_id, face_amount) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      args: [storedAmount, categoryId, note || null, timestamp, resolvedTagId, resolvedCardId, faceAmount]
+      sql: 'INSERT INTO expenses (amount, category_id, note, created_at, tag_id, card_id, face_amount, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      args: [storedAmount, categoryId, note || null, timestamp, resolvedTagId, resolvedCardId, faceAmount, userId]
     }, 'createExpense');
 
     const expenseId = Number(result.lastInsertRowid);
@@ -410,12 +418,12 @@ router.post('/', async (req, res) => {
     if (resolvedTagId !== null) {
       // Best-effort; never fail the request on this.
       trackedExecute(
-        { sql: 'UPDATE expense_tags SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?', args: [resolvedTagId] },
+        { sql: 'UPDATE expense_tags SET last_used_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?', args: [resolvedTagId, userId] },
         'updateTagLastUsedAt',
       ).catch(() => {});
     }
 
-    const expense = await loadExpenseById(expenseId);
+    const expense = await loadExpenseById(userId, expenseId);
     res.status(201).json(expenseRowToExpense(expense as ExpenseRow));
   } catch (err) {
     res.status(500).json({ message: (err as Error).message });
@@ -464,11 +472,12 @@ router.post('/', async (req, res) => {
  */
 router.put('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { id } = req.params;
     const numericId = Number(id);
     const { amount, category, note, createdAt, tagId, cardId } = req.body;
 
-    const existing = await loadExpenseById(id);
+    const existing = await loadExpenseById(userId, id);
     if (!existing) {
       return res.status(404).json({ message: 'Expense not found' });
     }
@@ -480,7 +489,7 @@ router.put('/:id', async (req, res) => {
     const ledgerStatements: { sql: string; args: InValue[] }[] = [];
 
     if (category !== undefined) {
-      const newCategoryId = await resolveCategoryId(category);
+      const newCategoryId = await resolveCategoryId(userId, category);
       updates.push('category_id = ?');
       args.push(newCategoryId);
     }
@@ -500,7 +509,7 @@ router.put('/:id', async (req, res) => {
           return res.status(400).json({ message: 'tagId must be an integer or null' });
         }
         const tagLookup = await trackedExecute(
-          { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ?', args: [tagId] },
+          { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ? AND user_id = ?', args: [tagId, userId] },
           'validateTagOnExpenseUpdate',
         );
         const tagRow = tagLookup.rows[0] as unknown as { id: number; is_archived: number } | undefined;
@@ -534,7 +543,7 @@ router.put('/:id', async (req, res) => {
       const origAllocs = await getAllocations(numericId);
 
       if (willBeCard) {
-        const card = await loadActiveCard(effectiveCardId as number);
+        const card = await loadActiveCard(userId, effectiveCardId as number);
         if (!card) {
           return res.status(400).json({ message: 'Invalid or archived cardId' });
         }
@@ -597,21 +606,21 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ message: 'No fields to update' });
     }
 
-    args.push(id);
+    args.push(id, userId);
     await db.batch(
-      [{ sql: `UPDATE expenses SET ${updates.join(', ')} WHERE id = ?`, args }, ...ledgerStatements],
+      [{ sql: `UPDATE expenses SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`, args }, ...ledgerStatements],
       'write',
     );
 
     if (pendingTagBump !== null) {
       // Best-effort; never fail the request on this.
       trackedExecute(
-        { sql: 'UPDATE expense_tags SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?', args: [pendingTagBump] },
+        { sql: 'UPDATE expense_tags SET last_used_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?', args: [pendingTagBump, userId] },
         'updateTagLastUsedAt',
       ).catch(() => {});
     }
 
-    const expense = await loadExpenseById(id);
+    const expense = await loadExpenseById(userId, id);
     res.json(expenseRowToExpense(expense as ExpenseRow));
   } catch (err) {
     res.status(500).json({ message: (err as Error).message });
@@ -638,10 +647,19 @@ router.put('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
+    const userId = getUserId(req);
+    const ownership = await trackedExecute({
+      sql: 'SELECT id FROM expenses WHERE id = ? AND user_id = ?',
+      args: [req.params.id, userId],
+    }, 'checkExpenseOwnershipForDelete');
+    if (ownership.rows.length === 0) {
+      return res.status(404).json({ message: 'Expense not found' });
+    }
+
     // If this was a card purchase, give the balance back to the tranches it drew
     // from before removing the row (the FK cascade only deletes allocation rows).
     const reversal = await buildReversalStatements(Number(req.params.id));
-    const statements = [...reversal, { sql: 'DELETE FROM expenses WHERE id = ?', args: [req.params.id] }];
+    const statements = [...reversal, { sql: 'DELETE FROM expenses WHERE id = ? AND user_id = ?', args: [req.params.id, userId] }];
     const results = await db.batch(statements, 'write');
 
     const deleteResult = results[results.length - 1];
