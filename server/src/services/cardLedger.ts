@@ -17,6 +17,29 @@ import { trackedExecute } from '../db/index.js';
 
 const EPS = 1e-9;
 
+/** A ledger write. Runs as part of the caller's `db.batch`, never on its own. */
+export interface LedgerStatement {
+  sql: string;
+  args: InValue[];
+}
+
+/**
+ * Did this error come from a drawdown refusing to overdraw a tranche? The guard
+ * writes NULL into a NOT NULL column to abort the batch (SQLite has no RAISE
+ * outside a trigger), so that is what a lost race looks like coming back.
+ *
+ * The file client and Turso word their errors differently — the remote one
+ * carries the SQLite code on `err.code` — so check both. Failing to recognise it
+ * only costs a 500 instead of a 409: either way the batch rolled back and no
+ * balance moved.
+ */
+export function isCardOverdraw(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  const code = String((err as { code?: unknown })?.code ?? '');
+  const notNull = code === 'SQLITE_CONSTRAINT_NOTNULL' || /NOT NULL constraint failed/i.test(message);
+  return notNull && /card_loads|face_remaining/i.test(message);
+}
+
 export const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
 
 interface TrancheRow {
@@ -71,7 +94,12 @@ export type AllocationPlan =
   | { ok: true; realCost: number; allocations: Allocation[]; balance: number }
   | { ok: false; balance: number };
 
-/** All open tranches for a card, oldest first (FIFO order). */
+/**
+ * All tranches for a card, oldest first (FIFO order).
+ *
+ * Only meaningful while the write lock is held: a snapshot read without it is
+ * already stale by the time the plan built from it is written.
+ */
 export async function getTranches(cardId: number): Promise<TrancheRow[]> {
   const result = await trackedExecute(
     {
@@ -123,28 +151,33 @@ export function planAllocationFromTranches(tranches: TrancheRow[], faceAmount: n
 }
 
 /**
- * Plan (but do not write) the FIFO allocation for a face-value purchase.
- * Returns `ok: false` with the current balance when the card can't cover it.
+ * Statements that write an expense's allocations and draw down the tranches.
+ *
+ * The drawdown re-checks the tranche at write time rather than trusting the plan
+ * it came from, so a stale plan aborts the batch instead of leaving
+ * `face_remaining` negative. See the guard below.
  */
-export async function planAllocation(cardId: number, faceAmount: number): Promise<AllocationPlan> {
-  const tranches = await getTranches(cardId);
-  return planAllocationFromTranches(tranches, faceAmount);
-}
-
-/** Statements that write an expense's allocations and draw down the tranches. */
 export function applyAllocationStatements(
   expenseId: number,
   allocations: Allocation[],
-): { sql: string; args: InValue[] }[] {
-  const statements: { sql: string; args: InValue[] }[] = [];
+): LedgerStatement[] {
+  const statements: LedgerStatement[] = [];
   for (const a of allocations) {
     statements.push({
       sql: 'INSERT INTO card_payment_allocations (expense_id, load_id, face_consumed, real_cost) VALUES (?, ?, ?, ?)',
       args: [expenseId, a.loadId, a.faceConsumed, a.realCost],
     });
+    // Writing NULL into a NOT NULL column is how a plain statement says "no":
+    // SQLite has no RAISE outside a trigger, and the constraint failure aborts
+    // the enclosing batch, so a tranche can never go negative even if the plan
+    // this came from was stale.
     statements.push({
-      sql: 'UPDATE card_loads SET face_remaining = face_remaining + ? WHERE id = ?',
-      args: [-a.faceConsumed, a.loadId],
+      sql: `UPDATE card_loads
+               SET face_remaining = CASE WHEN face_remaining >= ? - ${EPS}
+                                         THEN face_remaining - ?
+                                         ELSE NULL END
+             WHERE id = ?`,
+      args: [a.faceConsumed, a.faceConsumed, a.loadId],
     });
   }
   return statements;
@@ -158,9 +191,9 @@ export function applyAllocationStatements(
 export function reverseStatements(
   expenseId: number,
   allocations: Allocation[],
-): { sql: string; args: InValue[] }[] {
+): LedgerStatement[] {
   if (allocations.length === 0) return [];
-  const statements: { sql: string; args: InValue[] }[] = allocations.map((a) => ({
+  const statements: LedgerStatement[] = allocations.map((a) => ({
     sql: 'UPDATE card_loads SET face_remaining = face_remaining + ? WHERE id = ?',
     args: [a.faceConsumed, a.loadId],
   }));
@@ -175,9 +208,7 @@ export function reverseStatements(
  * Convenience: read an expense's allocations and build the reversal statements.
  * Safe when the expense has no allocations (returns an empty list).
  */
-export async function buildReversalStatements(
-  expenseId: number,
-): Promise<{ sql: string; args: InValue[] }[]> {
+export async function buildReversalStatements(expenseId: number): Promise<LedgerStatement[]> {
   const allocations = await getAllocations(expenseId);
   return reverseStatements(expenseId, allocations);
 }

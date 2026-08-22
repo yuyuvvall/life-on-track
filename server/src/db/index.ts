@@ -1,5 +1,7 @@
 import { createClient, Client } from '@libsql/client';
+import { HttpError } from '../errors.js';
 import { createTrackedExecute, queryLoggerMiddleware, setCurrentEndpoint, clearCurrentEndpoint } from './queryLogger.js';
+import type { StatementRunner } from './queryLogger.js';
 
 // Get database URL from environment
 // Local: file:./data/auditor.db
@@ -479,27 +481,31 @@ export async function ensureUserCategories(userId: string): Promise<void> {
  * If no category matches, creates a new one owned by that user with a
  * fallback icon/color and returns its id. Used by INSERT/UPDATE handlers to
  * keep `category_id` populated on every write so filters/joins are accurate.
+ *
+ * This *creates* a category as a side effect, so call it only once the request
+ * can no longer be rejected — otherwise a refused save leaves an invented
+ * category behind in the user's picker.
  */
 export async function resolveCategoryId(userId: string, name: string): Promise<number | null> {
   const trimmed = name.trim();
   if (!trimmed) return null;
-  const lookup = await db.execute({
+  const lookup = await trackedExecute({
     sql: 'SELECT id FROM categories WHERE user_id = ? AND LOWER(name) = LOWER(?) LIMIT 1',
     args: [userId, trimmed],
-  });
+  }, 'lookupCategoryByName');
   const existing = lookup.rows[0] as unknown as { id: number } | undefined;
   if (existing) return existing.id;
 
-  const maxResult = await db.execute({
+  const maxResult = await trackedExecute({
     sql: 'SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories WHERE user_id = ?',
     args: [userId],
-  });
+  }, 'nextCategorySortOrder');
   const nextOrder = Number((maxResult.rows[0] as unknown as { m: number }).m) + 1;
   const color = FALLBACK_PALETTE[(nextOrder - 1) % FALLBACK_PALETTE.length];
-  const insert = await db.execute({
+  const insert = await trackedExecute({
     sql: 'INSERT INTO categories (name, icon, color, sort_order, is_system, user_id) VALUES (?, ?, ?, ?, 0, ?)',
     args: [trimmed, '📦', color, nextOrder, userId],
-  });
+  }, 'createCategoryOnDemand');
   return Number(insert.lastInsertRowid);
 }
 
@@ -509,8 +515,131 @@ export const initDb = initializeDatabase;
 // Export client for queries
 export default db;
 
+/**
+ * The pooled client, but tolerant of a lock held by a concurrent write.
+ *
+ * A file-backed SQLite database refuses a second writer *instantly* with
+ * SQLITE_BUSY instead of queueing. Nothing in this process can trigger that —
+ * the file client runs a batch synchronously on one connection, and
+ * `withWriteLock` orders the rest — so this is for a *second* process on the same
+ * dev file: another `npm run dev`, a migration script, a sqlite3 shell. Against
+ * Turso it never fires at all.
+ *
+ * Kept at the statement level rather than as a `PRAGMA busy_timeout` so it covers
+ * every route without depending on which connection a statement lands on.
+ */
+const busyTolerantClient: StatementRunner = {
+  execute: async (stmt) => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await db.execute(stmt);
+      } catch (err) {
+        if (isBusy(err) && attempt < BUSY_RETRIES) {
+          await backoff(attempt);
+          continue;
+        }
+        throw asBusyResponse(err);
+      }
+    }
+  },
+};
+
 // Create tracked execute wrapper for logging
-export const trackedExecute = createTrackedExecute(db);
+export const trackedExecute = createTrackedExecute(busyTolerantClient);
+
+/**
+ * Serialise a read-then-write sequence against every other one for the same owner.
+ *
+ * A card allocation planned from `card_loads` and then written is only correct if
+ * nothing else writes in between: two overlapping purchases would otherwise both
+ * read the same balance, both pass the check, and both draw down. The API runs as
+ * a single Node process, so an in-process queue is enough to make the read and the
+ * write one indivisible step — and unlike `db.transaction()` it costs no
+ * connection. (The libsql file client hands its connection to each interactive
+ * transaction and never takes it back, so those leak one connection per call.)
+ *
+ * Keyed by user: every invariant it protects is per-user, so one person's saves
+ * must never queue behind another's — and a stall is contained to one account.
+ *
+ * Everything a decision is read from must be *inside* the callback. A row fetched
+ * before taking the lock is already stale, which is how an edit can end up written
+ * against a version of the expense that no longer exists.
+ *
+ * Held by the expense create/edit/delete handlers and the three card-load
+ * handlers — between them, every writer that reads `card_loads` before touching
+ * it. (`POST /recurring-expenses/generate` and the voice route also insert
+ * expenses without it; both hard-code `card_id` NULL, so neither can move a
+ * card balance.)
+ *
+ * This is the fast path, not the safety net: the drawdown statements themselves
+ * refuse to overdraw a tranche, so a write that skipped this lock — a second
+ * instance, a manual script, or one that ran past the timeout below — still
+ * cannot push a balance negative.
+ */
+const writeQueues = new Map<string, Promise<unknown>>();
+
+/**
+ * How long the queue waits on one callback before letting the next in. libsql sets
+ * no timeout of its own, so without this a single stalled round trip would park
+ * every later write for that user until the process restarts.
+ */
+const WRITE_LOCK_TIMEOUT_MS = 15_000;
+
+export function withWriteLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = writeQueues.get(key) ?? Promise.resolve();
+  // `then(fn, fn)` so one caller's rejection doesn't strand everyone behind it.
+  const run = previous.then(fn, fn);
+
+  const released: Promise<unknown> = Promise.race([
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+    sleep(WRITE_LOCK_TIMEOUT_MS),
+  ]);
+  writeQueues.set(key, released);
+  void released.then(() => {
+    // Drop idle keys so the map tracks active writers, not every user ever seen.
+    if (writeQueues.get(key) === released) writeQueues.delete(key);
+  });
+
+  return run;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    // Unref'd: a pending lock timer must never hold the process open.
+    setTimeout(resolve, ms).unref?.();
+  });
+}
+
+/**
+ * Two writers wanting the same lock is normal (a double-tapped save, two
+ * devices), not a server fault. SQLite hands back SQLITE_BUSY immediately rather
+ * than queueing, so we wait a moment and try again.
+ */
+const BUSY_RETRIES = 6;
+
+function isBusy(err: unknown): boolean {
+  const code = (err as { code?: unknown })?.code;
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return code === 'SQLITE_BUSY' || /SQLITE_BUSY|database is locked/i.test(message);
+}
+
+function backoff(attempt: number): Promise<void> {
+  // Jittered, so two clients that collided don't collide again in lockstep.
+  const delay = 15 * 2 ** attempt + Math.floor(Math.random() * 15);
+  return new Promise((resolve) => setTimeout(resolve, Math.min(delay, 400)));
+}
+
+/**
+ * A lock we never won is a "try again", not an internal error — surface it as
+ * 409 so the client can retry instead of showing a 500.
+ */
+function asBusyResponse(err: unknown): unknown {
+  if (!isBusy(err)) return err;
+  return new HttpError(409, 'The database was busy with another change. Please try again.');
+}
 
 // Re-export logging utilities
 export { queryLoggerMiddleware, setCurrentEndpoint, clearCurrentEndpoint };

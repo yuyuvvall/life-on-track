@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import type { InValue } from '@libsql/client';
-import db, { trackedExecute } from '../db/index.js';
+import db, { trackedExecute, withWriteLock } from '../db/index.js';
 import { getUserId } from '../middleware/auth.js';
 import {
   PrepaidCardRow,
@@ -9,6 +9,7 @@ import {
   PrepaidCard,
 } from '../types.js';
 import { getCardSummary, round2 } from '../services/cardLedger.js';
+import { sendError } from '../errors.js';
 
 const router = Router();
 
@@ -69,7 +70,7 @@ router.get('/', async (req: Request, res: Response) => {
     const cards = await Promise.all(rows.map(toPrepaidCard));
     res.json(cards);
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -114,7 +115,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -169,7 +170,7 @@ router.post('/', async (req: Request, res: Response) => {
     if (!row) return res.status(500).json({ message: 'Failed to load created card' });
     res.status(201).json(await toPrepaidCard(row));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -246,7 +247,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (!updated) return res.status(500).json({ message: 'Failed to load updated card' });
     res.json(await toPrepaidCard(updated));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -280,7 +281,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     );
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -316,7 +317,7 @@ router.get('/:id/loads', async (req: Request, res: Response) => {
     const rows = result.rows as unknown as CardLoadRow[];
     res.json(rows.map(cardLoadRowToCardLoad));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -389,13 +390,17 @@ router.post('/:id/loads', async (req: Request, res: Response) => {
 
     const timestamp = loadedAt || new Date().toISOString();
 
-    const insert = await trackedExecute(
-      {
-        sql: `INSERT INTO card_loads (card_id, cash_paid, face_value, discount_rate, face_remaining, note, loaded_at)
+    // Under the same lock the expense routes take, so a load never lands between
+    // a purchase reading this card's tranches and drawing them down.
+    const insert = await withWriteLock(userId, () =>
+      trackedExecute(
+        {
+          sql: `INSERT INTO card_loads (card_id, cash_paid, face_value, discount_rate, face_remaining, note, loaded_at)
               VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        args: [id, cashPaid, faceVal, rateStored, faceVal, note?.trim() || null, timestamp],
-      },
-      'createCardLoad',
+          args: [id, cashPaid, faceVal, rateStored, faceVal, note?.trim() || null, timestamp],
+        },
+        'createCardLoad',
+      ),
     );
 
     const loadResult = await trackedExecute(
@@ -410,7 +415,7 @@ router.post('/:id/loads', async (req: Request, res: Response) => {
       card: updatedCard ? await toPrepaidCard(updatedCard) : null,
     });
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -471,14 +476,24 @@ router.put('/:id/loads/:loadId', async (req: Request, res: Response) => {
       rateStored = rate;
     }
 
-    await trackedExecute(
-      {
-        sql: `UPDATE card_loads SET cash_paid = ?, face_value = ?, discount_rate = ?, face_remaining = ?, note = ?, loaded_at = ?
-              WHERE id = ?`,
-        args: [next.cashPaid, faceVal, rateStored, faceVal, next.note, next.loadedAt, loadId],
-      },
-      'updateCardLoad',
+    // The write lock keeps a purchase from being planned against this tranche
+    // while we rewrite it; the WHERE clause re-asserts "untouched" for anything
+    // that reached the database without going through this process. Both matter:
+    // this statement rewrites face_remaining from scratch, so a drawdown it
+    // doesn't see is a drawdown silently erased.
+    const updateResult = await withWriteLock(userId, () =>
+      trackedExecute(
+        {
+          sql: `UPDATE card_loads SET cash_paid = ?, face_value = ?, discount_rate = ?, face_remaining = ?, note = ?, loaded_at = ?
+              WHERE id = ? AND ABS(face_remaining - face_value) <= 1e-9`,
+          args: [next.cashPaid, faceVal, rateStored, faceVal, next.note, next.loadedAt, loadId],
+        },
+        'updateCardLoad',
+      ),
     );
+    if (updateResult.rowsAffected === 0) {
+      return res.status(409).json({ message: 'This load has already been partly spent and cannot be edited. Adjust the purchases first.' });
+    }
 
     const updated = await trackedExecute(
       { sql: 'SELECT * FROM card_loads WHERE id = ?', args: [loadId] },
@@ -486,7 +501,7 @@ router.put('/:id/loads/:loadId', async (req: Request, res: Response) => {
     );
     res.json(cardLoadRowToCardLoad(updated.rows[0] as unknown as CardLoadRow));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -522,13 +537,20 @@ router.delete('/:id/loads/:loadId', async (req: Request, res: Response) => {
       return res.status(409).json({ message: 'This load has already been partly spent and cannot be deleted. Adjust the purchases first.' });
     }
 
-    await trackedExecute(
-      { sql: 'DELETE FROM card_loads WHERE id = ?', args: [loadId] },
-      'deleteCardLoad',
+    // Same lock and compare-and-swap as the edit path: refuse to drop a tranche
+    // that has been spent from, or that a purchase is being planned against.
+    const deleteResult = await withWriteLock(userId, () =>
+      trackedExecute(
+        { sql: 'DELETE FROM card_loads WHERE id = ? AND ABS(face_remaining - face_value) <= 1e-9', args: [loadId] },
+        'deleteCardLoad',
+      ),
     );
+    if (deleteResult.rowsAffected === 0) {
+      return res.status(409).json({ message: 'This load has already been partly spent and cannot be deleted. Adjust the purchases first.' });
+    }
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -594,7 +616,7 @@ router.get('/:id/activity', async (req: Request, res: Response) => {
     const activity = [...loads, ...payments].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
     res.json(activity);
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
