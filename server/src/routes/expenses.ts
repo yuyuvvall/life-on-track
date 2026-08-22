@@ -1,15 +1,18 @@
 import { Router } from 'express';
+import type { Response } from 'express';
 import type { InValue } from '@libsql/client';
-import db, { trackedExecute, resolveCategoryId } from '../db/index.js';
+import db, { trackedExecute, resolveCategoryId, withWriteLock } from '../db/index.js';
 import { getUserId } from '../middleware/auth.js';
+import { HttpError, sendError as sendHttpError } from '../errors.js';
 import type { ExpenseRow, ExpenseRepaymentRow, PrepaidCardRow } from '../types.js';
 import { expenseRowToExpense, repaymentRowToRepayment } from '../types.js';
+import type { Allocation, LedgerStatement } from '../services/cardLedger.js';
 import {
-  planAllocation,
   planAllocationFromTranches,
   applyAllocationStatements,
   reverseStatements,
   buildReversalStatements,
+  isCardOverdraw,
   getAllocations,
   getTranches,
   round2,
@@ -37,15 +40,50 @@ async function loadExpenseById(userId: string, id: number | string): Promise<Exp
   return result.rows[0] as unknown as ExpenseRow | undefined;
 }
 
-/** Validate that a card exists, belongs to the user, and is active. Returns the row or null. */
-async function loadActiveCard(userId: string, cardId: number): Promise<PrepaidCardRow | null> {
+/**
+ * The shared `sendError`, plus the one mapping only this router needs: a batch
+ * aborted by the drawdown guard means another writer took the face value first,
+ * which is a conflict for the client to retry, not a server fault. (It lives here
+ * rather than in errors.ts so that module stays free of ledger knowledge.)
+ */
+function sendError(res: Response, err: unknown) {
+  if (isCardOverdraw(err)) {
+    return sendHttpError(res, new HttpError(409, 'The card balance changed while saving. Refresh and try again.'));
+  }
+  return sendHttpError(res, err);
+}
+
+/**
+ * `expenses.amount` is a REAL NOT NULL column that every report SUMs, and SQLite
+ * will happily store a string in it and then treat that row as 0 — so a bad
+ * amount doesn't fail loudly, it quietly deletes money from your totals. Every
+ * write path funnels through here.
+ */
+function requireAmount(value: unknown, label = 'Amount'): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new HttpError(400, `${label} must be a positive number`);
+  }
+  return value;
+}
+
+/** Validate that a card exists and belongs to the user. Returns the row or null. */
+async function loadCard(userId: string, cardId: number): Promise<PrepaidCardRow | null> {
   const result = await trackedExecute(
     { sql: 'SELECT * FROM prepaid_cards WHERE id = ? AND user_id = ?', args: [cardId, userId] },
     'validateCardOnExpense',
   );
-  const row = result.rows[0] as unknown as PrepaidCardRow | undefined;
-  if (!row || row.is_archived === 1) return null;
-  return row;
+  return (result.rows[0] as unknown as PrepaidCardRow | undefined) ?? null;
+}
+
+/**
+ * As `loadCard`, but also rejects an archived card. Use it wherever a card is
+ * being *newly assigned*; re-saving the card an expense already sits on must
+ * keep working after the user archives it, or archiving a spent-out card would
+ * lock every historical purchase on it out of editing.
+ */
+async function loadActiveCard(userId: string, cardId: number): Promise<PrepaidCardRow | null> {
+  const row = await loadCard(userId, cardId);
+  return row && row.is_archived !== 1 ? row : null;
 }
 
 /**
@@ -116,7 +154,7 @@ router.get('/', async (req, res) => {
     const expenses = result.rows as unknown as ExpenseRow[];
     res.json(expenses.map(expenseRowToExpense));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -151,7 +189,7 @@ router.get('/:id', async (req, res) => {
     }
     res.json(expenseRowToExpense(expense));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -195,7 +233,7 @@ router.get('/:id/repayments', async (req, res) => {
     const rows = result.rows as unknown as ExpenseRepaymentRow[];
     res.json(rows.map(repaymentRowToRepayment));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -274,7 +312,7 @@ router.post('/:id/repayments', async (req, res) => {
       expense: expenseRowToExpense(refreshed as ExpenseRow),
     });
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -314,7 +352,7 @@ router.delete('/:id/repayments/:repaymentId', async (req, res) => {
     }
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -353,6 +391,8 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Category is required' });
     }
 
+    const parsedAmount = requireAmount(amount);
+
     let resolvedTagId: number | null = null;
     if (tagId !== undefined && tagId !== null) {
       if (!Number.isInteger(tagId)) {
@@ -369,51 +409,70 @@ router.post('/', async (req, res) => {
       resolvedTagId = tagId;
     }
 
-    // When paid from a prepaid card, the incoming `amount` is the price tag
-    // (face value). We draw it down the card's tranches (FIFO) and store the
-    // discounted real cost as `amount`, keeping the price tag in `face_amount`.
-    let storedAmount = amount;
-    let faceAmount: number | null = null;
     let resolvedCardId: number | null = null;
-    let pendingAllocations: { loadId: number; faceConsumed: number; realCost: number }[] = [];
     if (cardId !== undefined && cardId !== null) {
       if (!Number.isInteger(cardId)) {
         return res.status(400).json({ message: 'cardId must be an integer' });
-      }
-      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
-        return res.status(400).json({ message: 'A card purchase amount must be a positive number' });
       }
       const card = await loadActiveCard(userId, cardId);
       if (!card) {
         return res.status(400).json({ message: 'Invalid or archived cardId' });
       }
-      const plan = await planAllocation(cardId, amount);
-      if (!plan.ok) {
-        const shortfall = Math.round((amount - plan.balance) * 100) / 100;
-        return res.status(400).json({ message: `Amount exceeds card balance by ${shortfall}` });
-      }
-      faceAmount = amount;
-      storedAmount = plan.realCost;
       resolvedCardId = cardId;
-      pendingAllocations = plan.allocations;
     }
 
     // Use provided date or default to now
     const timestamp = createdAt || new Date().toISOString();
 
-    const categoryId = await resolveCategoryId(userId, category);
+    // Under the write lock the FIFO plan cannot go stale between being read and
+    // being written, and the category is only invented once every guard has
+    // passed — a rejected create used to leave one behind in the picker.
+    const expense = await withWriteLock(userId, async () => {
+      // When paid from a prepaid card, the incoming `amount` is the price tag
+      // (face value). We draw it down the card's tranches (FIFO) and store the
+      // discounted real cost as `amount`, keeping the price tag in `face_amount`.
+      let storedAmount = parsedAmount;
+      let faceAmount: number | null = null;
+      let allocations: Allocation[] = [];
+      if (resolvedCardId !== null) {
+        const plan = planAllocationFromTranches(await getTranches(resolvedCardId), parsedAmount);
+        if (!plan.ok) {
+          throw new HttpError(400, `Amount exceeds card balance by ${round2(parsedAmount - plan.balance)}`);
+        }
+        faceAmount = parsedAmount;
+        storedAmount = plan.realCost;
+        allocations = plan.allocations;
+      }
 
-    const result = await trackedExecute({
-      sql: 'INSERT INTO expenses (amount, category_id, note, created_at, tag_id, card_id, face_amount, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      args: [storedAmount, categoryId, note || null, timestamp, resolvedTagId, resolvedCardId, faceAmount, userId]
-    }, 'createExpense');
+      const categoryId = await resolveCategoryId(userId, category);
 
-    const expenseId = Number(result.lastInsertRowid);
+      const result = await trackedExecute({
+        sql: 'INSERT INTO expenses (amount, category_id, note, created_at, tag_id, card_id, face_amount, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        args: [storedAmount, categoryId, note || null, timestamp, resolvedTagId, resolvedCardId, faceAmount, userId],
+      }, 'createExpense');
 
-    // Draw down the card tranches and record which load(s) this purchase consumed.
-    if (resolvedCardId !== null && pendingAllocations.length > 0) {
-      await db.batch(applyAllocationStatements(expenseId, pendingAllocations), 'write');
-    }
+      const newId = Number(result.lastInsertRowid);
+
+      // Draw down the card tranches and record which load(s) this purchase consumed.
+      // The row and its drawdown are two writes, so if the drawdown is refused —
+      // the plan went stale under a writer outside this process — take the row
+      // back out. Otherwise the user sees a failed save that nonetheless left a
+      // card purchase behind, drawn from nothing.
+      if (allocations.length > 0) {
+        try {
+          await db.batch(applyAllocationStatements(newId, allocations), 'write');
+        } catch (err) {
+          await trackedExecute(
+            { sql: 'DELETE FROM expenses WHERE id = ? AND user_id = ?', args: [newId, userId] },
+            'rollBackUnallocatedExpense',
+          ).catch(() => {});
+          throw err;
+        }
+      }
+
+      // Read back inside the lock so the response reflects this write, not a later one.
+      return await loadExpenseById(userId, newId);
+    });
 
     if (resolvedTagId !== null) {
       // Best-effort; never fail the request on this.
@@ -423,10 +482,9 @@ router.post('/', async (req, res) => {
       ).catch(() => {});
     }
 
-    const expense = await loadExpenseById(userId, expenseId);
     res.status(201).json(expenseRowToExpense(expense as ExpenseRow));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -477,140 +535,188 @@ router.put('/:id', async (req, res) => {
     const numericId = Number(id);
     const { amount, category, note, createdAt, tagId, cardId } = req.body;
 
-    const existing = await loadExpenseById(userId, id);
-    if (!existing) {
-      return res.status(404).json({ message: 'Expense not found' });
-    }
-
-    // Build the expense-row updates plus any ledger statements (reversal of old
-    // allocations and application of new ones) so the whole edit is one atomic batch.
-    const updates: string[] = [];
-    const args: InValue[] = [];
-    const ledgerStatements: { sql: string; args: InValue[] }[] = [];
-
-    if (category !== undefined) {
-      const newCategoryId = await resolveCategoryId(userId, category);
-      updates.push('category_id = ?');
-      args.push(newCategoryId);
-    }
-    if (note !== undefined) {
-      updates.push('note = ?');
-      args.push(note);
-    }
-    if (createdAt !== undefined) {
-      updates.push('created_at = ?');
-      args.push(createdAt);
-    }
+    // ── Body-shape validation: the only thing that can be judged without the row ─
+    if (amount !== undefined) requireAmount(amount);
 
     let pendingTagBump: number | null = null;
-    if (tagId !== undefined) {
-      if (tagId !== null) {
-        if (!Number.isInteger(tagId)) {
-          return res.status(400).json({ message: 'tagId must be an integer or null' });
-        }
-        const tagLookup = await trackedExecute(
-          { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ? AND user_id = ?', args: [tagId, userId] },
-          'validateTagOnExpenseUpdate',
-        );
-        const tagRow = tagLookup.rows[0] as unknown as { id: number; is_archived: number } | undefined;
-        if (!tagRow || tagRow.is_archived === 1) {
-          return res.status(400).json({ message: 'Invalid or archived tagId' });
-        }
-        pendingTagBump = tagId;
+    if (tagId !== undefined && tagId !== null) {
+      if (!Number.isInteger(tagId)) {
+        return res.status(400).json({ message: 'tagId must be an integer or null' });
       }
-      updates.push('tag_id = ?');
-      args.push(tagId);
+      const tagLookup = await trackedExecute(
+        { sql: 'SELECT id, is_archived FROM expense_tags WHERE id = ? AND user_id = ?', args: [tagId, userId] },
+        'validateTagOnExpenseUpdate',
+      );
+      const tagRow = tagLookup.rows[0] as unknown as { id: number; is_archived: number } | undefined;
+      if (!tagRow || tagRow.is_archived === 1) {
+        return res.status(400).json({ message: 'Invalid or archived tagId' });
+      }
+      pendingTagBump = tagId;
     }
 
-    // ── Card / amount handling ────────────────────────────────────────────────
-    const cardInBody = cardId !== undefined;
-    if (cardInBody && cardId !== null && !Number.isInteger(cardId)) {
+    if (cardId !== undefined && cardId !== null && !Number.isInteger(cardId)) {
       return res.status(400).json({ message: 'cardId must be an integer or null' });
     }
-    const effectiveCardId: number | null = cardInBody ? (cardId === null ? null : cardId) : existing.card_id;
-    const amountInBody = amount !== undefined;
-    const wasCard = existing.card_id != null;
-    const willBeCard = effectiveCardId != null;
-    const cardChanged = cardInBody && (cardId ?? null) !== (existing.card_id ?? null);
-    const needsRealloc = (willBeCard && (amountInBody || cardChanged)) || (wasCard && !willBeCard);
 
-    // The amount that will end up stored after this edit (real money), for the
-    // repaid-total guard below. Only known per-branch: a card re-allocation
-    // stores plan.realCost, not the face value the client sent.
-    let finalStoredAmount: number | undefined;
+    // ── Everything that reads the expense runs under the lock ──────────────────
+    // `existing` decides which branch this edit takes, what face value is
+    // re-allocated, and whether `samePurchase` short-circuits. Read before the
+    // lock it can be stale by the time the branch runs — an overlapping save
+    // would leave the row claiming a face value its allocations no longer match.
+    // Guards here throw `HttpError`; a `return` would only exit the callback.
+    const expense = await withWriteLock(userId, async () => {
+      const existing = await loadExpenseById(userId, id);
+      if (!existing) {
+        throw new HttpError(404, 'Expense not found');
+      }
 
-    if (needsRealloc) {
-      const origAllocs = await getAllocations(numericId);
+      const updates: string[] = [];
+      const args: InValue[] = [];
+      const ledgerStatements: LedgerStatement[] = [];
+
+      // The category is deliberately resolved last (see below), because resolving
+      // it can create one and nothing after that point may reject the edit.
+      if (note !== undefined) {
+        updates.push('note = ?');
+        args.push(note);
+      }
+      if (createdAt !== undefined) {
+        updates.push('created_at = ?');
+        args.push(createdAt);
+      }
+      if (tagId !== undefined) {
+        updates.push('tag_id = ?');
+        args.push(tagId);
+      }
+
+      // ── Card / amount handling ──────────────────────────────────────────────
+      const cardInBody = cardId !== undefined;
+      const effectiveCardId: number | null = cardInBody ? (cardId === null ? null : cardId) : existing.card_id;
+      const amountInBody = amount !== undefined;
+      const wasCard = existing.card_id != null;
+      const willBeCard = effectiveCardId != null;
+      const cardChanged = cardInBody && (cardId ?? null) !== (existing.card_id ?? null);
+      const needsRealloc = (willBeCard && (amountInBody || cardChanged)) || (wasCard && !willBeCard);
 
       if (willBeCard) {
-        const card = await loadActiveCard(userId, effectiveCardId as number);
+        // Only a card being newly assigned has to be active — see `loadActiveCard`.
+        const card = cardChanged
+          ? await loadActiveCard(userId, effectiveCardId as number)
+          : await loadCard(userId, effectiveCardId as number);
         if (!card) {
-          return res.status(400).json({ message: 'Invalid or archived cardId' });
+          throw new HttpError(400, 'Invalid or archived cardId');
         }
-        // The face value to (re)allocate: the new price tag if given, otherwise
-        // keep the existing one (or, for a direct→card switch, the old amount).
-        const newFace = amountInBody ? amount : (existing.face_amount ?? existing.amount);
-        if (typeof newFace !== 'number' || !Number.isFinite(newFace) || newFace <= 0) {
-          return res.status(400).json({ message: 'A card purchase amount must be a positive number' });
-        }
-
-        // Plan against the destination card's tranches. When we're re-allocating
-        // on the SAME card, first restore (in memory) the face this expense
-        // already holds, so it competes for its own freed-up balance.
-        const tranches = await getTranches(effectiveCardId as number);
-        if (existing.card_id === effectiveCardId) {
-          for (const a of origAllocs) {
-            const t = tranches.find((x) => x.id === a.loadId);
-            if (t) t.face_remaining += a.faceConsumed;
-          }
-        }
-        const plan = planAllocationFromTranches(tranches, newFace);
-        if (!plan.ok) {
-          const shortfall = round2(newFace - plan.balance);
-          return res.status(400).json({ message: `Amount exceeds card balance by ${shortfall}` });
-        }
-
-        ledgerStatements.push(...reverseStatements(numericId, origAllocs));
-        ledgerStatements.push(...applyAllocationStatements(numericId, plan.allocations));
-        updates.push('amount = ?'); args.push(plan.realCost);
-        updates.push('face_amount = ?'); args.push(newFace);
-        updates.push('card_id = ?'); args.push(effectiveCardId);
-        finalStoredAmount = plan.realCost;
-      } else {
-        // Card → direct: give back the balance and clear the card fields. The
-        // price tag becomes the plain amount unless a new amount was supplied.
-        ledgerStatements.push(...reverseStatements(numericId, origAllocs));
-        const newAmount = amountInBody ? amount : (existing.face_amount ?? existing.amount);
-        updates.push('amount = ?'); args.push(newAmount);
-        updates.push('face_amount = ?'); args.push(null);
-        updates.push('card_id = ?'); args.push(null);
-        finalStoredAmount = newAmount;
       }
-    } else if (amountInBody) {
-      // Plain amount edit on a direct expense (no card involved).
-      updates.push('amount = ?');
-      args.push(amount);
-      finalStoredAmount = amount;
-    }
 
-    // An edit may not drop the stored amount below what's already been repaid —
-    // the user must delete repayments first, keeping money history explicit.
-    const repaidTotal = Number(existing.repaid_total ?? 0);
-    if (finalStoredAmount !== undefined && repaidTotal > 0 && finalStoredAmount < repaidTotal - 1e-9) {
-      return res.status(400).json({
-        message: `New amount is below the ${round2(repaidTotal)} already repaid. Delete repayments first.`,
-      });
-    }
+      // The amount that will end up stored after this edit (real money), for the
+      // repaid-total guard below. Only known per-branch: a card re-allocation
+      // stores plan.realCost, not the face value the client sent.
+      let finalStoredAmount: number | undefined;
 
-    if (updates.length === 0) {
-      return res.status(400).json({ message: 'No fields to update' });
-    }
+      if (needsRealloc) {
+        const origAllocs = await getAllocations(numericId);
 
-    args.push(id, userId);
-    await db.batch(
-      [{ sql: `UPDATE expenses SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`, args }, ...ledgerStatements],
-      'write',
-    );
+        if (willBeCard) {
+          // The face value to (re)allocate: the new price tag if given, otherwise
+          // keep the existing one (or, for a direct→card switch, the old amount).
+          const newFace = requireAmount(
+            amountInBody ? amount : (existing.face_amount ?? existing.amount),
+            'A card purchase amount',
+          );
+
+          // Same card, same price tag — the purchase itself didn't change, so keep
+          // the allocations it already holds. Re-running FIFO here would re-price a
+          // purchase the user never touched (a cheaper tranche may have been freed
+          // since), silently rewriting `amount` and potentially tripping the repaid
+          // guard below on an edit that only renamed a category.
+          const samePurchase =
+            existing.card_id === effectiveCardId &&
+            existing.face_amount != null &&
+            Math.abs(newFace - existing.face_amount) < EPS;
+
+          if (samePurchase) {
+            updates.push('amount = ?'); args.push(existing.amount);
+            updates.push('face_amount = ?'); args.push(existing.face_amount);
+            updates.push('card_id = ?'); args.push(effectiveCardId);
+            finalStoredAmount = existing.amount;
+          } else {
+            // Plan against the destination card's tranches. When we're re-allocating
+            // on the SAME card, first restore (in memory) the face this expense
+            // already holds, so it competes for its own freed-up balance.
+            const tranches = await getTranches(effectiveCardId as number);
+            if (existing.card_id === effectiveCardId) {
+              for (const a of origAllocs) {
+                const t = tranches.find((x) => x.id === a.loadId);
+                if (t) t.face_remaining += a.faceConsumed;
+              }
+            }
+            const plan = planAllocationFromTranches(tranches, newFace);
+            if (!plan.ok) {
+              throw new HttpError(400, `Amount exceeds card balance by ${round2(newFace - plan.balance)}`);
+            }
+
+            ledgerStatements.push(...reverseStatements(numericId, origAllocs));
+            ledgerStatements.push(...applyAllocationStatements(numericId, plan.allocations));
+            updates.push('amount = ?'); args.push(plan.realCost);
+            updates.push('face_amount = ?'); args.push(newFace);
+            updates.push('card_id = ?'); args.push(effectiveCardId);
+            finalStoredAmount = plan.realCost;
+          }
+        } else {
+          // Card → direct: give back the balance and clear the card fields. The
+          // price tag becomes the plain amount unless a new amount was supplied.
+          ledgerStatements.push(...reverseStatements(numericId, origAllocs));
+          const newAmount = requireAmount(amountInBody ? amount : (existing.face_amount ?? existing.amount));
+          updates.push('amount = ?'); args.push(newAmount);
+          updates.push('face_amount = ?'); args.push(null);
+          updates.push('card_id = ?'); args.push(null);
+          finalStoredAmount = newAmount;
+        }
+      } else if (amountInBody) {
+        // Plain amount edit on a direct expense (no card involved).
+        updates.push('amount = ?');
+        args.push(amount);
+        finalStoredAmount = amount;
+      }
+
+      // An edit may not drop the stored amount below what's already been repaid —
+      // the user must delete repayments first, keeping money history explicit.
+      const repaidTotal = Number(existing.repaid_total ?? 0);
+      if (finalStoredAmount !== undefined && repaidTotal > 0 && finalStoredAmount < repaidTotal - EPS) {
+        throw new HttpError(
+          400,
+          `New amount is below the ${round2(repaidTotal)} already repaid. Delete repayments first.`,
+        );
+      }
+
+      // Only now, with every rejection behind us, is it safe to invent a category.
+      if (category !== undefined) {
+        updates.push('category_id = ?');
+        args.push(await resolveCategoryId(userId, category));
+      }
+
+      if (updates.length === 0) {
+        throw new HttpError(400, 'No fields to update');
+      }
+
+      args.push(id, userId);
+      const results = await db.batch(
+        [
+          { sql: `UPDATE expenses SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`, args },
+          ...ledgerStatements,
+        ],
+        'write',
+      );
+      if (results[0].rowsAffected === 0) {
+        // Deleted between the read and the write — impossible while we hold the
+        // lock, but the batch is the only thing that can say so authoritatively.
+        throw new HttpError(404, 'Expense not found');
+      }
+
+      // Read back inside the lock, so the response describes what this request
+      // wrote rather than whatever the next writer has since done.
+      return await loadExpenseById(userId, id);
+    });
 
     if (pendingTagBump !== null) {
       // Best-effort; never fail the request on this.
@@ -620,10 +726,9 @@ router.put('/:id', async (req, res) => {
       ).catch(() => {});
     }
 
-    const expense = await loadExpenseById(userId, id);
     res.json(expenseRowToExpense(expense as ExpenseRow));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -648,28 +753,34 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const userId = getUserId(req);
-    const ownership = await trackedExecute({
-      sql: 'SELECT id FROM expenses WHERE id = ? AND user_id = ?',
-      args: [req.params.id, userId],
-    }, 'checkExpenseOwnershipForDelete');
-    if (ownership.rows.length === 0) {
-      return res.status(404).json({ message: 'Expense not found' });
-    }
 
-    // If this was a card purchase, give the balance back to the tranches it drew
-    // from before removing the row (the FK cascade only deletes allocation rows).
-    const reversal = await buildReversalStatements(Number(req.params.id));
-    const statements = [...reversal, { sql: 'DELETE FROM expenses WHERE id = ? AND user_id = ?', args: [req.params.id, userId] }];
-    const results = await db.batch(statements, 'write');
+    // Read the allocations under the write lock. Without it two overlapping
+    // deletes of the same expense each restore the same face value, inflating the
+    // card's balance out of nothing.
+    const deleted = await withWriteLock(userId, async () => {
+      const ownership = await trackedExecute({
+        sql: 'SELECT id FROM expenses WHERE id = ? AND user_id = ?',
+        args: [req.params.id, userId],
+      }, 'checkExpenseOwnershipForDelete');
+      if (ownership.rows.length === 0) return false;
 
-    const deleteResult = results[results.length - 1];
-    if (deleteResult.rowsAffected === 0) {
+      // If this was a card purchase, give the balance back to the tranches it drew
+      // from before removing the row (the FK cascade only deletes allocation rows).
+      const reversal = await buildReversalStatements(Number(req.params.id));
+      const results = await db.batch(
+        [...reversal, { sql: 'DELETE FROM expenses WHERE id = ? AND user_id = ?', args: [req.params.id, userId] }],
+        'write',
+      );
+      return results[results.length - 1].rowsAffected > 0;
+    });
+
+    if (!deleted) {
       return res.status(404).json({ message: 'Expense not found' });
     }
 
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 

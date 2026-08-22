@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { estimateCardCost, balanceFromCash, cashFromBalance, round2 } from './cardMath';
+import {
+  estimateCardCost,
+  balanceFromCash,
+  cashFromBalance,
+  round2,
+  spendableCardBalance,
+} from './cardMath';
 
 describe('estimateCardCost', () => {
   it('discounts the price tag by the rate', () => {
@@ -62,5 +68,34 @@ describe('round2', () => {
   it('rounds to 2 decimals', () => {
     expect(round2(1.005)).toBe(1.01);
     expect(round2(70.0000001)).toBe(70);
+  });
+});
+
+describe('spendableCardBalance', () => {
+  // A ₪40 card, ₪30 already spent on the expense being edited: the card reports
+  // ₪10, but re-saving that same ₪30 must not read as an overdraft.
+  const held = { cardId: 7, faceAmount: 30 };
+
+  it('adds back the face this expense already holds on the same card', () => {
+    expect(spendableCardBalance(10, 7, held)).toBe(40);
+  });
+
+  it('ignores face held on a different card', () => {
+    expect(spendableCardBalance(10, 8, held)).toBe(10);
+  });
+
+  it('adds nothing for a new expense or one still loading', () => {
+    expect(spendableCardBalance(10, 7, null)).toBe(10);
+    expect(spendableCardBalance(10, 7, undefined)).toBe(10);
+  });
+
+  it('adds nothing when the expense was direct, not on a card', () => {
+    expect(spendableCardBalance(10, 7, { cardId: null, faceAmount: null })).toBe(10);
+  });
+
+  it('rounds away float drift so an exact re-save is not over budget', () => {
+    const spendable = spendableCardBalance(10.1, 7, { cardId: 7, faceAmount: 19.9 });
+    expect(spendable).toBe(30);
+    expect(30 > spendable).toBe(false);
   });
 });

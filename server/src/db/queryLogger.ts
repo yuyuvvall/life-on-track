@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import type { Client, ResultSet, InStatement } from '@libsql/client';
+import type { ResultSet, InStatement } from '@libsql/client';
 
 // Log directory and file path
 const LOG_DIR = join(process.cwd(), 'logs');
@@ -111,8 +111,19 @@ export function clearCurrentEndpoint() {
   currentUiPurpose = undefined;
 }
 
+/**
+ * Anything that can run a single statement. The client is wrapped before being
+ * handed here (see `busyTolerantClient`), so this is the seam that lets the
+ * logging and the retry compose instead of one having to know about the other.
+ */
+export interface StatementRunner {
+  execute(stmt: InStatement): Promise<ResultSet>;
+}
+
+export type TrackedExecute = (sql: string | InStatement, technicalPurpose: string) => Promise<ResultSet>;
+
 // Create a tracked execute function that wraps db.execute
-export function createTrackedExecute(db: Client) {
+export function createTrackedExecute(db: StatementRunner): TrackedExecute {
   return async function trackedExecute(
     sql: string | InStatement,
     technicalPurpose: string

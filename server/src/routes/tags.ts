@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { trackedExecute, resolveCategoryId } from '../db/index.js';
 import { getUserId } from '../middleware/auth.js';
 import { TagRow, tagRowToTag } from '../types.js';
+import { sendError } from '../errors.js';
 
 const router = Router();
 
@@ -40,7 +41,7 @@ router.get('/', async (req: Request, res: Response) => {
     const tags = (result.rows as unknown as TagRow[]).map(tagRowToTag);
     res.json(tags);
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -75,7 +76,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (!row) return res.status(404).json({ message: 'Tag not found' });
     res.json(tagRowToTag(row));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -129,7 +130,7 @@ router.post('/', async (req: Request, res: Response) => {
     );
     res.status(201).json(tagRowToTag((lookup.rows as unknown as TagRow[])[0]));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -212,7 +213,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     );
     res.json(tagRowToTag((lookup.rows as unknown as TagRow[])[0]));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -241,7 +242,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 

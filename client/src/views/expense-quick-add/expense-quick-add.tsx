@@ -5,7 +5,7 @@ import { useCategories } from '@/hooks/useCategories'
 import { useCards } from '@/hooks/useCards'
 import { showToast } from '@/store/toastStore'
 import { CURRENCY_SYMBOL, formatCurrency } from '@/utils/currency'
-import { estimateCardCost } from '@/utils/cardMath'
+import { estimateCardCost, spendableCardBalance, round2 } from '@/utils/cardMath'
 import { WEEK_DAY_NAMES } from '@/utils/dateConstants'
 import type { RecurrenceType } from '@/types'
 import KeypadButton from './keypad-button'
@@ -101,8 +101,14 @@ const ExpenseQuickAdd = () => {
   const parsedAmount = parseFloat(amount)
   const faceAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0
   const cardEstimate = selectedCard ? estimateCardCost(faceAmount, selectedCard.defaultDiscountRate) : null
-  const overBalance = selectedCard !== null && faceAmount > selectedCard.balance
-  const overBy = overBalance && selectedCard ? faceAmount - selectedCard.balance : 0
+  // When editing a purchase that already sits on the selected card, its face value
+  // is still drawn down there — the card's balance excludes it. It's spendable
+  // again on re-save, so add it back before judging an overdraft.
+  const spendable = selectedCard
+    ? spendableCardBalance(selectedCard.balance, selectedCard.id, existingExpense)
+    : 0
+  const overBalance = selectedCard !== null && faceAmount > spendable
+  const overBy = overBalance && selectedCard ? round2(faceAmount - spendable) : 0
 
   // Recurring is direct-only (out of scope for cards). Selecting a card clears it.
   useEffect(() => {
@@ -297,7 +303,9 @@ const ExpenseQuickAdd = () => {
             >
               <span aria-hidden>{card.icon}</span> {card.name}{' '}
               <span className="expense-quick-add__source-balance">
-                {formatCurrency(card.balance)}
+                {/* While editing, show what this purchase can actually spend here —
+                    its own face value is still drawn down on the card it sits on. */}
+                {formatCurrency(spendableCardBalance(card.balance, card.id, existingExpense))}
               </span>
             </button>
           ))}

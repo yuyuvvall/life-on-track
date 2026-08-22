@@ -3,6 +3,7 @@ import db, { trackedExecute, resolveCategoryId } from '../db/index.js';
 import { getUserId } from '../middleware/auth.js';
 import type { CategoryBudgetRow } from '../types.js';
 import { budgetRowToBudget } from '../types.js';
+import { sendError } from '../errors.js';
 
 const router = Router();
 
@@ -52,7 +53,7 @@ router.get('/', async (req, res) => {
     const rows = result.rows as unknown as CategoryBudgetRow[];
     res.json(rows.map(budgetRowToBudget));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -114,7 +115,7 @@ router.post('/', async (req, res) => {
     const row = result.rows[0] as unknown as CategoryBudgetRow;
     res.json(budgetRowToBudget(row));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -184,7 +185,7 @@ router.post('/change-from-now', async (req, res) => {
     const row = result.rows[0] as unknown as CategoryBudgetRow;
     res.json(budgetRowToBudget(row));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -232,7 +233,7 @@ router.post('/remove-entirely', async (req, res) => {
 
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -268,7 +269,7 @@ router.delete('/:id', async (req, res) => {
 
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 

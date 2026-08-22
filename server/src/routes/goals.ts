@@ -4,6 +4,7 @@ import db, { getPeriodStart, trackedExecute } from '../db/index.js';
 import { getUserId } from '../middleware/auth.js';
 import type { GoalRow, GoalLogRow, GoalStats } from '../types.js';
 import { goalRowToGoal, goalLogRowToGoalLog } from '../types.js';
+import { sendError } from '../errors.js';
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.get('/', async (req, res) => {
     await recalculateFrequencyGoalsCurrentValue(goals);
     res.json(goals.map(goalRowToGoal));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -83,7 +84,7 @@ router.get('/:id', async (req, res) => {
     const goal = result.rows[0] as unknown as GoalRow;
     res.json(goalRowToGoal(goal));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -143,7 +144,7 @@ router.get('/:id/stats', async (req, res) => {
     const stats = calculateGoalStats(goal, logs, subGoals);
     res.json(stats);
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -161,7 +162,7 @@ router.get('/:id/subgoals', async (req, res) => {
     const subGoals = result.rows as unknown as GoalRow[];
     res.json(subGoals.map(goalRowToGoal));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -186,7 +187,7 @@ router.get('/:id/logs', async (req, res) => {
     const logs = result.rows as unknown as GoalLogRow[];
     res.json(logs.map(goalLogRowToGoalLog));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -276,7 +277,7 @@ router.post('/', async (req, res) => {
     const goal = goalResult.rows[0] as unknown as GoalRow;
     res.status(201).json(goalRowToGoal(goal));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -346,7 +347,7 @@ router.patch('/:id', async (req, res) => {
     const goal = goalResult.rows[0] as unknown as GoalRow;
     res.json(goalRowToGoal(goal));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -451,7 +452,7 @@ router.post('/:id/logs', async (req, res) => {
       goal: goalRowToGoal(updatedGoal),
     });
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -605,7 +606,7 @@ router.patch('/:goalId/logs/:logId', async (req, res) => {
       goal: goalRowToGoal(updatedGoal),
     });
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -624,7 +625,7 @@ router.delete('/:id', async (req, res) => {
 
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 

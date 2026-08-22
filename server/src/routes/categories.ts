@@ -3,6 +3,7 @@ import type { InValue } from '@libsql/client';
 import { trackedExecute, ensureUserCategories } from '../db/index.js';
 import { getUserId } from '../middleware/auth.js';
 import { CategoryRow, categoryRowToCategory } from '../types.js';
+import { sendError } from '../errors.js';
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.get('/', async (req: Request, res: Response) => {
     const rows = result.rows as unknown as CategoryRow[];
     res.json(rows.map(categoryRowToCategory));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -97,7 +98,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -163,7 +164,7 @@ router.post('/', async (req: Request, res: Response) => {
     if (!row) return res.status(500).json({ message: 'Failed to load created category' });
     res.status(201).json(categoryRowToCategory(row));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -268,7 +269,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (!updated) return res.status(500).json({ message: 'Failed to load updated category' });
     res.json(categoryRowToCategory(updated));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -306,7 +307,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     );
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
