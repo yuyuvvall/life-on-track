@@ -3,6 +3,7 @@ import { getToday, trackedExecute } from '../db/index.js';
 import { getUserId } from '../middleware/auth.js';
 import type { WorkLogRow } from '../types.js';
 import { workLogRowToWorkLog } from '../types.js';
+import { sendError } from '../errors.js';
 
 const router = Router();
 
@@ -32,7 +33,7 @@ router.get('/', async (req, res) => {
     const logs = result.rows as unknown as WorkLogRow[];
     res.json(logs.map(workLogRowToWorkLog));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -64,7 +65,7 @@ router.get('/today', async (req, res) => {
     const log = result.rows[0] as unknown as WorkLogRow | undefined;
     res.json(log ? workLogRowToWorkLog(log) : null);
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -80,7 +81,7 @@ router.get('/date/:date', async (req, res) => {
     const log = result.rows[0] as unknown as WorkLogRow | undefined;
     res.json(log ? workLogRowToWorkLog(log) : null);
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -155,7 +156,7 @@ router.post('/', async (req, res) => {
     const log = logResult.rows[0] as unknown as WorkLogRow;
     res.status(existing ? 200 : 201).json(workLogRowToWorkLog(log));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -216,7 +217,7 @@ router.patch('/:id', async (req, res) => {
     const log = logResult.rows[0] as unknown as WorkLogRow;
     res.json(workLogRowToWorkLog(log));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 

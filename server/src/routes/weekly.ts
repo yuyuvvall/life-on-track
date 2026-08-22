@@ -5,6 +5,7 @@ import type { WorkLogRow, ExpenseRow, GoalRow, WeeklySummary } from '../types.js
 import { workLogRowToWorkLog, expenseRowToExpense, goalRowToGoal } from '../types.js';
 import { recalculateFrequencyGoalsCurrentValue } from './goals.js';
 import { EXPENSE_COLUMNS } from './expenses.js';
+import { sendError } from '../errors.js';
 
 const router = Router();
 
@@ -99,7 +100,7 @@ router.get('/', async (req, res) => {
 
     res.json(summary);
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -150,7 +151,7 @@ router.post('/reflection', async (req, res) => {
     }, 'submitWeeklyReflection');
     res.json({ message: 'Reflection submitted successfully' });
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 

@@ -4,6 +4,7 @@ import { trackedExecute } from '../db/index.js';
 import { getUserId } from '../middleware/auth.js';
 import type { TaskRow, SubTaskRow } from '../types.js';
 import { taskRowToTask, subTaskRowToSubTask } from '../types.js';
+import { sendError } from '../errors.js';
 
 const router = Router();
 
@@ -53,7 +54,7 @@ router.get('/', async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -101,7 +102,7 @@ router.get('/:id', async (req, res) => {
     
     res.json(taskRowToTask(task, subTasks));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -161,7 +162,7 @@ router.post('/', async (req, res) => {
     const task = taskResult.rows[0] as unknown as TaskRow;
     res.status(201).json(taskRowToTask(task, []));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -266,7 +267,7 @@ router.patch('/:id', async (req, res) => {
     
     res.json(taskRowToTask(task, subTasks));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -302,7 +303,7 @@ router.delete('/:id', async (req, res) => {
 
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -355,7 +356,7 @@ router.post('/:taskId/subtasks', async (req, res) => {
     
     res.status(201).json(taskRowToTask(updatedTask, subTasks));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -406,7 +407,7 @@ router.patch('/:taskId/subtasks/:subTaskId', async (req, res) => {
     
     res.json(taskRowToTask(task, subTasks));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
@@ -441,7 +442,7 @@ router.delete('/:taskId/subtasks/:subTaskId', async (req, res) => {
     
     res.json(taskRowToTask(task, subTasks));
   } catch (err) {
-    res.status(500).json({ message: (err as Error).message });
+    sendError(res, err);
   }
 });
 
