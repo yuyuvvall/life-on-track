@@ -44,3 +44,25 @@ export function cashFromBalance(faceValue: number, rate: number): number {
 export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
+
+/**
+ * How much face value a purchase may spend on a card *while being edited*.
+ *
+ * A card expense's face value is already drawn down on the card, so `card.balance`
+ * (Σ face_remaining) excludes it. Re-planning that same expense on that same card
+ * gets to spend it again, so the guard must add it back — otherwise re-saving an
+ * unchanged ₪30 purchase on a card showing ₪10 looks like an overdraft.
+ *
+ * This mirrors the server, which restores the expense's own allocations into the
+ * tranche snapshot before re-running FIFO (server/src/routes/expenses.ts, PUT /:id).
+ * Face held on a *different* card is not available here: moving the expense plans
+ * against the destination card's untouched tranches.
+ */
+export function spendableCardBalance(
+  cardBalance: number,
+  cardId: number,
+  held: { cardId: number | null; faceAmount: number | null } | null | undefined,
+): number {
+  const heldFace = held && held.cardId === cardId ? held.faceAmount ?? 0 : 0;
+  return round2(cardBalance + heldFace);
+}
